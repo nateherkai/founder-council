@@ -8,7 +8,22 @@ import { usage } from "./lib/anthropic.mjs";
 import * as watch from "./lib/watch.mjs";
 
 const PORT = Number(process.env.PORT) || 4730;
+const LOCAL_HOSTS = new Set([`localhost:${PORT}`, `127.0.0.1:${PORT}`]);
 const PUBLIC = path.join(APP_ROOT, "public");
+
+// Blocks CSRF/DNS-rebinding against state-changing endpoints: Host must be
+// this server's own local address (rebinding sends an attacker Host, not
+// localhost/127.0.0.1), and Origin, when a browser sends one, must match too.
+function isTrustedLocalRequest(req) {
+  if (!LOCAL_HOSTS.has(req.headers.host || "")) return false;
+  const origin = req.headers.origin;
+  if (origin === undefined) return true;
+  try {
+    return LOCAL_HOSTS.has(new URL(origin).host);
+  } catch {
+    return false;
+  }
+}
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".webp": "image/webp", ".ico": "image/x-icon", ".json": "application/json", ".ttf": "font/ttf", ".txt": "text/plain; charset=utf-8" };
 
 let running = null; // one council at a time (API runner)
@@ -36,6 +51,8 @@ const server = http.createServer(async (req, res) => {
     if (p === "/api/seats") return send(res, 200, { seats: SEATS, models: MODELS, runner: RUNNER, hasKey: Boolean(env("ANTHROPIC_API_KEY")) });
     if (p === "/api/usage") return send(res, 200, usage);
     if (p === "/api/council" && req.method === "POST") {
+      if (!isTrustedLocalRequest(req)) return send(res, 403, { error: "Request rejected: wrong host or origin." });
+      if ((req.headers["content-type"] || "").split(";")[0].trim() !== "application/json") return send(res, 400, { error: "Expected application/json." });
       if (RUNNER !== "api") return send(res, 403, { error: "This room is a viewer. Run /roast-room in Claude Code, or set COUNCIL_RUNNER=api in .env." });
       if (running && getSession(running)?.status === "running") return send(res, 409, { error: "A council is already in session. Wait for its verdict." });
       const { prompt, mode } = await readJson(req);

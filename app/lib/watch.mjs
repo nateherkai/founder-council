@@ -61,7 +61,11 @@ function finish(x, status) {
 }
 
 function normalizeSetup(c) {
-  const options = (c.options || []).map((o, i) => (typeof o === "string" ? { id: "ABCD"[i], label: o } : { id: String(o.id || "ABCD"[i]).toUpperCase(), label: o.label || o.text || "" }));
+  const options = (c.options || []).map((o, i) => {
+    if (typeof o === "string") return { id: "ABCD"[i], label: o };
+    const id = String(o.id || "ABCD"[i]).toUpperCase();
+    return { id: /^[A-D]$/.test(id) ? id : "ABCD"[i], label: o.label || o.text || "" };
+  });
   const weights = Object.fromEntries(SEATS.map((s) => [s.key, { weight: 1, reason: "" }]));
   const wl = Array.isArray(c.weights) ? c.weights : Object.entries(c.weights || {}).map(([seat, w]) => (typeof w === "number" ? { seat, weight: w } : { seat, ...w }));
   for (const w of wl) { const k = seatKey(w.seat); if (k) weights[k] = { weight: Math.max(1, Math.min(3, Number(w.weight) || 1)), reason: w.reason || "" }; }
