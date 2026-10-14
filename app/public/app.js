@@ -349,7 +349,7 @@ function onSetup(ev) {
   $("#topicTitle").textContent = ev.title;
   typeIn($("#topicTitle"));
   $("#options").innerHTML = ev.options.map((o) => `
-    <div class="opt" data-opt="${o.id}"><span class="id">${o.id}</span><span class="label">${esc(o.label)}</span><span class="val">-</span><span class="bar"><i></i></span></div>`).join("");
+    <div class="opt" data-opt="${esc(o.id)}"><span class="id">${esc(o.id)}</span><span class="label">${esc(o.label)}</span><span class="val">-</span><span class="bar"><i></i></span></div>`).join("");
   for (const s of state.seats) {
     const absent = !ev.seats.includes(s.key);
     $(`#seat-${s.key}`).classList.toggle("absent", absent);
@@ -675,7 +675,7 @@ function onVerdict(ev) {
         <div class="v-sec"><h3>Where they fought</h3><ul>${v.fights.map((f) => `<li><b>${esc(f.crux)}</b> ${esc(f.story)}</li>`).join("")}</ul></div>
         <div class="v-sec"><h3>Conditions</h3><ol>${v.conditions.map((c) => `<li>${esc(c)}</li>`).join("")}</ol></div>
         <div class="v-sec v-wide"><h3>Scorecard</h3>
-          <table class="scorecard"><thead><tr><th>Seat</th><th>Weight</th>${state.options.map((o) => `<th>${o.id}</th>`).join("")}<th>Their line</th></tr></thead><tbody>
+          <table class="scorecard"><thead><tr><th>Seat</th><th>Weight</th>${state.options.map((o) => `<th>${esc(o.id)}</th>`).join("")}<th>Their line</th></tr></thead><tbody>
           ${seats.map((x) => { const s = state.byKey[x.key]; return `<tr><td><span class="who"><img class="av" src="${portrait(x.key)}" alt="">${esc(s.short)}</span></td><td class="n">${x.weight}</td>${state.options.map((o) => `<td class="n">${x.optionScores?.[o.id] ?? "-"}</td>`).join("")}<td class="line">${short(x.oneLine, 150)}</td></tr>`; }).join("")}
           </tbody></table>
           <p class="muted" style="font-size:11.5px;margin-top:8px">Weighted by how much each pillar matters here. ${state.options.map((o) => `${o.id}: ${esc(v.scores[o.id]?.math || "")}`).join(" · ")}</p></div>
