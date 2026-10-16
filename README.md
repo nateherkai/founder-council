@@ -66,6 +66,13 @@ More ways to run it:
 
 The room is optional. The council runs the same in Claude Code without it.
 
+### Codex
+
+For a global text-only Codex skill, run `python3 scripts/install_codex.py`.
+No Node server or separate API key is required. See [Codex setup](codex/README.md)
+for installation paths, invocation, optional saved reports, and offline tests.
+The Claude Code workflow above is unchanged.
+
 ## Watch an example first
 
 Run `npm start`, open http://localhost:4730, and click **Past sessions**. Three finished councils ship with the repo, so you can see how it works (and download their PDFs) before you run your own.
