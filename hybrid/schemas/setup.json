@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title", "decision", "brief", "options", "assumptions", "weights", "quick_seats"],
+  "properties": {
+    "title": {"type": "string"},
+    "decision": {"type": "string"},
+    "brief": {"type": "string"},
+    "options": {"type": "array", "minItems": 2, "maxItems": 4, "items": {"type": "object", "additionalProperties": false, "required": ["id", "label"], "properties": {"id": {"enum": ["A", "B", "C", "D"]}, "label": {"type": "string"}}}},
+    "assumptions": {"type": "array", "items": {"type": "string"}},
+    "weights": {"type": "array", "minItems": 7, "maxItems": 7, "items": {"type": "object", "additionalProperties": false, "required": ["seat", "weight", "reason"], "properties": {"seat": {"enum": ["bezos", "graham", "hormozi", "garyvee", "martell", "wickman", "buffett"]}, "weight": {"type": "integer", "minimum": 1, "maximum": 3}, "reason": {"type": "string"}}}},
+    "quick_seats": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"enum": ["bezos", "graham", "hormozi", "garyvee", "martell", "wickman", "buffett"]}}
+  }
+}

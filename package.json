@@ -6,7 +6,9 @@
   "type": "module",
   "scripts": {
     "start": "node app/server.mjs",
-    "smoke": "node app/scripts/smoke.mjs"
+    "smoke": "node app/scripts/smoke.mjs",
+    "hybrid": "node hybrid/runner.mjs",
+    "hybrid:quick": "node hybrid/runner.mjs --quick"
   },
   "engines": { "node": ">=20" }
 }

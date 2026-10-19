@@ -74,13 +74,19 @@ Run `npm start`, open http://localhost:4730, and click **Past sessions**. Three 
 
 - **The council runs in Claude Code.** Each seat is a sub-agent (`.claude/agents/council-*.md`) that reads its own brain (`.claude/skills/roast-room/brains/<name>/`): frameworks, principles, positions, stories, and voice notes compiled from public sources, with every quote tied to a source. Claude Code acts as the Chair. It runs the rounds, keeps score, and writes the verdict (`.claude/skills/roast-room/SKILL.md`).
 - **Each seat scores every option**, weighted by how much that seat's pillar matters to your decision. The Chair caps the verdict when a seat flags ruin risk, and it forces a real argument when everyone agrees too fast.
-- **The room only watches.** As the Chair works, it writes each step to `sessions/`, and the app plays those files back. Between rounds it shows which round is running, how long it has been, and what each advisor is weighing. The room makes no AI calls of its own.
+- **The room watches session files.** In the original Claude Code/viewer flow it makes no AI calls itself. In `hybrid` or `api` mode, the composer can launch the selected runner, which still writes the same files to `sessions/` for the room to play back.
 - **Every council is saved** in `sessions/`. Past sessions replays any of them and downloads its PDF.
 - **Usage:** a full council is 21 sub-agent runs, so it takes a real bite out of your plan's usage. Use `--quick` for small calls.
 
-## Optional: let the room run councils itself
+## Hybrid local runner
 
-If you'd rather type a decision straight into the room, copy `.env.example` to `.env`, add an `ANTHROPIC_API_KEY`, set `COUNCIL_RUNNER=api`, and restart `npm start`. That mode bills your Anthropic API account (about 25 calls per full council).
+This checkout also includes `hybrid/`, which lets you type a decision directly into the room without an Anthropic API key. Set `COUNCIL_RUNNER=hybrid`: the seven advisor seats run through the authenticated Gemini CLI, while setup, cruxes, and the final Chair verdict run through the authenticated GitHub Copilot CLI. If Copilot is unavailable, the Chair can fall back to Gemini. The runner writes the same `sessions/` files, so the existing live room, replay, and PDF flow stay unchanged.
+
+On this 8 GB machine the tested settings are `GEMINI_MODEL=gemini-2.5-flash` and `GEMINI_CONCURRENCY=1`. See `hybrid/README.md` for the terminal commands and architecture.
+
+## Optional: Anthropic API runner
+
+If you'd rather use the original API runner, copy `.env.example` to `.env`, add an `ANTHROPIC_API_KEY`, set `COUNCIL_RUNNER=api`, and restart `npm start`. That mode bills your Anthropic API account (about 25 calls per full council).
 
 ## What's inside
 
@@ -89,6 +95,7 @@ If you'd rather type a decision straight into the room, copy `.env.example` to `
 | `.claude/skills/roast-room/` | The skill: protocol, prompts, scoring, report template, and the seven brains |
 | `.claude/agents/` | The seven seat agents |
 | `app/` | The room: a zero-dependency Node server, the web page, and the PDF builder |
+| `hybrid/` | Gemini-seat + Copilot-Chair local runner and its JSON schemas |
 | `sessions/` | Your councils (kept out of git) and the three examples |
 
 ## About the advisors

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["option", "label", "recommendation", "conditions", "next_steps", "cheapest_test", "kill_criteria"],
+  "properties": {
+    "option": {"enum": ["A", "B", "C", "D"]},
+    "label": {"enum": ["GO", "GO WITH CONDITIONS", "RESHAPE", "WAIT", "DON'T DO IT"]},
+    "recommendation": {"type": "string"},
+    "conditions": {"type": "array", "items": {"type": "string"}},
+    "next_steps": {"type": "array", "items": {"type": "string"}},
+    "cheapest_test": {"type": "string"},
+    "kill_criteria": {"type": "string"}
+  }
+}

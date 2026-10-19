@@ -1,7 +1,8 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
-import { APP_ROOT, env } from "./lib/env.mjs";
+import { spawn } from "node:child_process";
+import { APP_ROOT, REPO_ROOT, SESSIONS_DIR, env } from "./lib/env.mjs";
 import { SEATS } from "./lib/seats.mjs";
 import { startCouncil, getSession, subscribe, listSaved, loadSaved, MODELS } from "./lib/council.mjs";
 import { usage } from "./lib/anthropic.mjs";
@@ -11,12 +12,49 @@ const PORT = Number(process.env.PORT) || 4730;
 const PUBLIC = path.join(APP_ROOT, "public");
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".webp": "image/webp", ".ico": "image/x-icon", ".json": "application/json", ".ttf": "font/ttf", ".txt": "text/plain; charset=utf-8" };
 
-let running = null; // one council at a time (API runner)
+let running = null; // Anthropic API runner session id
+let hybridRunning = null;
+let hybridProcess = null;
 
-// "viewer" (default): the room plays councils that /roast-room runs in Claude Code.
-// "api": the room can also run councils itself on ANTHROPIC_API_KEY (COUNCIL_RUNNER=api in .env).
-const RUNNER = (process.env.COUNCIL_RUNNER || env("COUNCIL_RUNNER") || "viewer").toLowerCase() === "api" ? "api" : "viewer";
+// viewer: watches sessions written by Claude Code or another runner.
+// api: original Anthropic API runner.
+// hybrid: Gemini advisor seats + Copilot Student Chair through local authenticated CLIs.
+const runnerSetting = (process.env.COUNCIL_RUNNER || env("COUNCIL_RUNNER") || "viewer").toLowerCase();
+const RUNNER = runnerSetting === "api" || runnerSetting === "hybrid" ? runnerSetting : "viewer";
 watch.startWatching();
+
+function waitForHybridSetup(id, child, timeoutMs = 120000) {
+  const marker = path.join(SESSIONS_DIR, id, "council.json");
+  return new Promise((resolve, reject) => {
+    const started = Date.now();
+    const tick = () => {
+      if (fs.existsSync(marker)) return resolve();
+      if (child.exitCode != null) return reject(new Error(`Hybrid runner exited before setup (code ${child.exitCode}).`));
+      if (Date.now() - started > timeoutMs) return reject(new Error("Hybrid runner did not finish setup in time."));
+      setTimeout(tick, 250);
+    };
+    tick();
+  });
+}
+
+async function startHybrid(prompt, mode) {
+  if (hybridProcess && hybridProcess.exitCode == null) throw new Error("A Hybrid council is already running.");
+  const id = `${new Date().toISOString().slice(0, 10)}-hybrid-${Date.now().toString(36)}`;
+  const args = [path.join(REPO_ROOT, "hybrid", "runner.mjs"), mode === "quick" ? "--quick" : "--full", "--session-id", id, prompt];
+  const childEnv = { ...process.env };
+  for (const key of ["CHAIR_PROVIDER", "GEMINI_CONCURRENCY", "GEMINI_MODEL", "GEMINI_CLI_ENTRY", "COPILOT_CLI"]) {
+    const value = env(key);
+    if (value) childEnv[key] = value;
+  }
+  const child = spawn(process.execPath, args, { cwd: REPO_ROOT, windowsHide: true, env: childEnv });
+  hybridProcess = child;
+  hybridRunning = id;
+  child.stdout.on("data", (d) => process.stdout.write(`[hybrid] ${d}`));
+  child.stderr.on("data", (d) => process.stderr.write(`[hybrid] ${d}`));
+  child.on("exit", () => { if (hybridProcess === child) { hybridProcess = null; hybridRunning = null; } });
+  await waitForHybridSetup(id, child);
+  return id;
+}
 
 function send(res, code, body, type = "application/json") {
   res.writeHead(code, { "content-type": type, "cache-control": "no-store" });
@@ -36,11 +74,17 @@ const server = http.createServer(async (req, res) => {
     if (p === "/api/seats") return send(res, 200, { seats: SEATS, models: MODELS, runner: RUNNER, hasKey: Boolean(env("ANTHROPIC_API_KEY")) });
     if (p === "/api/usage") return send(res, 200, usage);
     if (p === "/api/council" && req.method === "POST") {
-      if (RUNNER !== "api") return send(res, 403, { error: "This room is a viewer. Run /roast-room in Claude Code, or set COUNCIL_RUNNER=api in .env." });
-      if (running && getSession(running)?.status === "running") return send(res, 409, { error: "A council is already in session. Wait for its verdict." });
+      if (RUNNER === "viewer") return send(res, 403, { error: "This room is viewer-only. Set COUNCIL_RUNNER=hybrid or api." });
       const { prompt, mode } = await readJson(req);
       if (!prompt || prompt.trim().length < 10) return send(res, 400, { error: "Give the council a real decision (at least a sentence)." });
-      const s = startCouncil(prompt.trim().slice(0, 4000), mode === "quick" ? "quick" : "full");
+      const cleanPrompt = prompt.trim().slice(0, 4000);
+      if (RUNNER === "hybrid") {
+        if (hybridProcess && hybridProcess.exitCode == null) return send(res, 409, { error: "A Hybrid council is already in session. Wait for its verdict." });
+        const id = await startHybrid(cleanPrompt, mode === "quick" ? "quick" : "full");
+        return send(res, 200, { id });
+      }
+      if (running && getSession(running)?.status === "running") return send(res, 409, { error: "A council is already in session. Wait for its verdict." });
+      const s = startCouncil(cleanPrompt, mode === "quick" ? "quick" : "full");
       running = s.id;
       return send(res, 200, { id: s.id });
     }
@@ -56,8 +100,8 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === "/api/sessions") {
       const all = [...listSaved(), ...watch.listLive()].sort((a, b) => (a.id < b.id ? 1 : -1));
-      const apiRunning = running && getSession(running)?.status === "running" ? running : null;
-      return send(res, 200, { sessions: all, running: apiRunning, live: watch.runningId() });
+      const active = RUNNER === "hybrid" ? hybridRunning : (running && getSession(running)?.status === "running" ? running : null);
+      return send(res, 200, { sessions: all, running: active, live: watch.runningId() });
     }
     if (p.startsWith("/api/sessions/")) {
       const id = decodeURIComponent(p.split("/").pop());
@@ -75,4 +119,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, "127.0.0.1", () => console.log(`Roast Room on http://localhost:${PORT} (${RUNNER === "api" ? "viewer + API runner" : "viewer: run /roast-room in Claude Code"})`));
+server.listen(PORT, "127.0.0.1", () => {
+  const label = RUNNER === "api" ? "Anthropic API runner" : RUNNER === "hybrid" ? "Hybrid: Gemini seats + Copilot Student Chair" : "viewer";
+  console.log(`Roast Room on http://localhost:${PORT} (${label})`);
+});

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["label", "call", "override_note", "why", "fights", "minority", "amendments", "conditions", "next_steps", "cheapest_test", "kill_criteria", "revisit", "recommended"],
+  "properties": {
+    "label": {"enum": ["GO", "GO WITH CONDITIONS", "RESHAPE", "WAIT", "DON'T DO IT"]},
+    "call": {"type": "string"},
+    "override_note": {"type": "string"},
+    "recommended": {"enum": ["A", "B", "C", "D"]},
+    "why": {"type": "array", "minItems": 3, "maxItems": 5, "items": {"type": "object", "additionalProperties": false, "required": ["point", "seat", "framework"], "properties": {"point": {"type": "string"}, "seat": {"type": "string"}, "framework": {"type": "string"}}}},
+    "fights": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["crux", "story"], "properties": {"crux": {"type": "string"}, "story": {"type": "string"}}}},
+    "minority": {"type": "object", "additionalProperties": false, "required": ["seat", "quote", "would_have_to_be_true"], "properties": {"seat": {"type": "string"}, "quote": {"type": "string"}, "would_have_to_be_true": {"type": "string"}}},
+    "amendments": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["seat", "amendment", "adopted", "reason"], "properties": {"seat": {"type": "string"}, "amendment": {"type": "string"}, "adopted": {"type": "boolean"}, "reason": {"type": "string"}}}},
+    "conditions": {"type": "array", "items": {"type": "string"}},
+    "next_steps": {"type": "array", "minItems": 1, "maxItems": 6, "items": {"type": "object", "additionalProperties": false, "required": ["when", "action"], "properties": {"when": {"type": "string"}, "action": {"type": "string"}}}},
+    "cheapest_test": {"type": "string"},
+    "kill_criteria": {"type": "string"},
+    "revisit": {"type": "string"}
+  }
+}

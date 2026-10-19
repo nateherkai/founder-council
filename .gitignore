@@ -1,6 +1,9 @@
 .env
 node_modules/
 .DS_Store
+hybrid/*.log
+hybrid/*-smoke.*
+hybrid/.codex-*.json
 
 # your councils stay on your machine; the examples ship with the repo
 sessions/*

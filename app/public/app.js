@@ -257,8 +257,8 @@ function reset() {
   hideWait();
   $("#stage").classList.remove("live");
   $("#topic").hidden = true;
-  $("#composer").hidden = state.runner !== "api";
-  $("#waiting").hidden = state.runner === "api";
+  $("#composer").hidden = state.runner === "viewer";
+  $("#waiting").hidden = state.runner !== "viewer";
   $("#caption").hidden = true;
   $("#cruxes").hidden = true;
   $("#plate").hidden = true;
