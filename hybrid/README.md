@@ -24,6 +24,12 @@ Quick council:
 
 `npm run hybrid:quick -- "your decision and context"`
 
+Resume an interrupted hybrid session without rerunning completed seats or Chair stages:
+
+`npm run hybrid:resume -- SESSION_ID`
+
+The runner loads `.env` itself before it resolves providers, models, and concurrency. Explicit process environment variables still take precedence. Each completed seat card is checkpointed to `round-N.json`, and older interrupted sessions that only have `round-N.md` are reconstructed automatically when possible.
+
 ## Architecture and safety
 
 The Node runner loads the original Roast Room agent instructions and brain files and places that reference material directly in each Gemini seat prompt. Gemini runs in read-only plan mode; it does not write the session files. The Copilot Chair runs in an isolated empty working directory with custom instructions and built-in MCP servers disabled and remote control disabled. The Node runner is the only component that writes session artifacts.

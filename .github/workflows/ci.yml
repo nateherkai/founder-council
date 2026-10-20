@@ -19,3 +19,5 @@ jobs:
         run: npm run check
       - name: Viewer smoke test
         run: npm run ci:smoke
+      - name: Hybrid resume smoke test
+        run: npm run resume:smoke

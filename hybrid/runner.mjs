@@ -8,6 +8,22 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
 const SESSIONS = path.join(ROOT, "sessions");
 const SCHEMAS = path.join(HERE, "schemas");
+
+function loadDotEnv(file) {
+  if (!fs.existsSync(file)) return;
+  for (const raw of fs.readFileSync(file, "utf8").split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const i = line.indexOf("=");
+    if (i < 1) continue;
+    const key = line.slice(0, i).trim();
+    let value = line.slice(i + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
+    if (!(key in process.env)) process.env[key] = value;
+  }
+}
+loadDotEnv(path.join(ROOT, ".env"));
+
 const NPM_BIN = path.join(process.env.APPDATA || path.join(process.env.USERPROFILE || "", "AppData", "Roaming"), "npm");
 const GEMINI = process.env.GEMINI_CLI_ENTRY || path.join(NPM_BIN, "node_modules", "@google", "gemini-cli", "bundle", "gemini.js");
 const COPILOT_DEFAULT = path.join(process.env.LOCALAPPDATA || "", "Microsoft", "WinGet", "Packages", "GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe", "copilot.exe");
@@ -18,19 +34,24 @@ const CONCURRENCY = Math.max(1, Math.min(4, Number(process.env.GEMINI_CONCURRENC
 const DISCLAIMER = "Simulated advisors built from each person's public work. They are not the people and do not speak for them.";
 
 const argv = process.argv.slice(2);
-let quick = false, full = false, forcedId = "";
+let quick = false, full = false, forcedId = "", resumeId = "";
 const words = [];
 for (let i = 0; i < argv.length; i++) {
   if (argv[i] === "--quick") quick = true;
   else if (argv[i] === "--full") full = true;
   else if (argv[i] === "--session-id") forcedId = argv[++i] || "";
+  else if (argv[i] === "--resume") resumeId = argv[++i] || "";
   else words.push(argv[i]);
 }
-const mode = quick && !full ? "quick" : "full";
+let mode = quick && !full ? "quick" : "full";
 const prompt = words.join(" ").trim();
-if (forcedId && !/^[a-zA-Z0-9._-]+$/.test(forcedId)) throw new Error("Invalid --session-id");
-if (!prompt) {
+for (const [label, value] of [["--session-id", forcedId], ["--resume", resumeId]]) {
+  if (value && !/^[a-zA-Z0-9._-]+$/.test(value)) throw new Error(`Invalid ${label}`);
+}
+if (resumeId && forcedId) throw new Error("Use either --resume or --session-id, not both");
+if (!prompt && !resumeId) {
   console.log("Usage: npm run hybrid -- [--quick|--full] [--session-id id] \"your business decision and context\"");
+  console.log("   or: npm run hybrid -- --resume SESSION_ID");
   process.exit(2);
 }
 
@@ -201,6 +222,37 @@ function writeRound(st, round, chairNotes = "") {
   const body = st.seats.filter((k) => st.cards[round][k]).map((k) => `## ${byKey[k].name} (weight ${st.weights[k].weight})\n\n${st.cards[round][k].text}`).join("\n\n");
   writeText(path.join(st.dir, `round-${round}.md`), `# Round ${round}\n\n${body}${chairNotes ? `\n\n## Chair notes\n\n${chairNotes}` : ""}\n`);
 }
+function writeRoundState(st, round) {
+  writeJson(path.join(st.dir, `round-${round}.json`), { round, cards: st.cards[round], scores: scoreOptions(st, round) });
+}
+function loadRoundState(st, round) {
+  const jsonPath = path.join(st.dir, `round-${round}.json`);
+  if (fs.existsSync(jsonPath)) {
+    const saved = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
+    st.cards[round] = saved.cards || {};
+    st.scores[round] = saved.scores || scoreOptions(st, round);
+    return;
+  }
+  const mdPath = path.join(st.dir, `round-${round}.md`);
+  if (!fs.existsSync(mdPath)) return;
+  const sections = fs.readFileSync(mdPath, "utf8").split(/^## /m).slice(1);
+  for (const section of sections) {
+    const nl = section.indexOf("\n");
+    const heading = (nl >= 0 ? section.slice(0, nl) : section).trim();
+    if (/^Chair notes/i.test(heading)) continue;
+    const key = st.seats.find((k) => heading.startsWith(byKey[k].name));
+    if (!key) continue;
+    const text = (nl >= 0 ? section.slice(nl + 1) : "").trim();
+    if (!text) continue;
+    const parsed = parseCard(text, st.options.map((o) => o.id));
+    st.cards[round][key] = { text, parsed, quotes: checkQuotes(key, text) };
+  }
+  if (Object.keys(st.cards[round]).length) {
+    st.scores[round] = scoreOptions(st, round);
+    writeRoundState(st, round);
+  }
+}
+function roundComplete(st, round) { return st.seats.every((k) => st.cards[round]?.[k]); }
 function briefMarkdown(st) {
   return `# ${st.title}\n\nAsked: ${prompt}\n\n${st.brief}\n\nOptions:\n${st.options.map((o)=>`- ${o.id}: ${o.label}`).join("\n")}\n\nAssumptions:\n${(st.assumptions||[]).map((a)=>`- ${a}`).join("\n") || "- none"}\n\n| Seat | Weight | Reason |\n|---|---|---|\n${SEATS.map((s)=>`| ${s.short} | ${st.weights[s.key].weight} | ${st.weights[s.key].reason} |`).join("\n")}\n`;
 }
@@ -216,63 +268,115 @@ function verdictMarkdown(st, v, stats, rounds) {
 }
 
 async function runRound(st, round, taskFn) {
-  st.cards[round] = {};
-  await mapLimit(st.seats, CONCURRENCY, async (key) => {
+  st.cards[round] ||= {};
+  const missing = st.seats.filter((key) => !st.cards[round][key]);
+  if (!missing.length) {
+    st.scores[round] = scoreOptions(st, round);
+    console.log(`Round ${round}: already complete, reusing saved cards.`);
+    return st.scores[round];
+  }
+  await mapLimit(missing, CONCURRENCY, async (key) => {
     console.log(`  Gemini ${round}.${seatNames[key]}...`);
     const text = await geminiText(taskFn(st, key));
     const parsed = parseCard(text, st.options.map((o)=>o.id));
+    if (Object.keys(parsed.optionScores).length < st.options.length) throw new Error(`${seatNames[key]} returned an invalid score card in round ${round}`);
     st.cards[round][key] = { text, parsed, quotes: checkQuotes(key, text) };
     writeRound(st, round);
-    if (Object.keys(parsed.optionScores).length < st.options.length) throw new Error(`${seatNames[key]} returned an invalid score card in round ${round}`);
+    writeRoundState(st, round);
   });
   st.scores[round] = scoreOptions(st, round);
+  writeRoundState(st, round);
   return st.scores[round];
 }
 
-console.log(`Hybrid Roast Room: ${mode} council`);
+let setup, st, dir;
+if (resumeId) {
+  dir = path.join(SESSIONS, resumeId);
+  const councilPath = path.join(dir, "council.json");
+  if (!fs.existsSync(councilPath)) throw new Error(`Cannot resume: missing council.json in ${resumeId}`);
+  const saved = JSON.parse(fs.readFileSync(councilPath, "utf8"));
+  if (saved.runner !== "hybrid") throw new Error(`Cannot resume non-hybrid session: ${resumeId}`);
+  if (fs.existsSync(path.join(dir, "verdict.json"))) {
+    const done = JSON.parse(fs.readFileSync(path.join(dir, "verdict.json"), "utf8"));
+    console.log(`Session ${resumeId} is already complete.`);
+    console.log("Verdict:", done.label, "|", done.call);
+    console.log("Full report:", path.join(dir, "verdict.md"));
+    process.exit(0);
+  }
+  mode = saved.mode || mode;
+  setup = { title:saved.title, decision:saved.decision, options:saved.options || [], brief:saved.brief || "", assumptions:saved.assumptions || [] };
+  const weights = saved.weights || Object.fromEntries(SEATS.map((s)=>[s.key,{weight:1,reason:""}]));
+  const seats = (saved.seats || SEATS.map((s)=>s.key)).filter((k)=>byKey[k]);
+  st = { ...setup, weights, seats, dir, cards:{1:{},2:{},3:{}}, scores:{} };
+  for (const r of [1,2,3]) loadRoundState(st, r);
+  const cruxPath = path.join(dir, "cruxes.json");
+  if (fs.existsSync(cruxPath)) {
+    const crux = JSON.parse(fs.readFileSync(cruxPath, "utf8"));
+    st.cruxes = crux.cruxes;
+    st.pressure = Object.fromEntries((crux.pressure || []).map((x)=>[x.seat,x.ask]));
+  }
+  const draftPath = path.join(dir, "draft.json");
+  if (fs.existsSync(draftPath)) st.draft = JSON.parse(fs.readFileSync(draftPath, "utf8"));
+  const metaPath = path.join(dir, "hybrid-meta.json");
+  const meta = fs.existsSync(metaPath) ? JSON.parse(fs.readFileSync(metaPath, "utf8")) : {};
+  writeJson(metaPath, { ...meta, resumed_at:new Date().toISOString(), gemini_model:GEMINI_MODEL||meta.gemini_model||"cli-default", concurrency:CONCURRENCY });
+  console.log(`Resuming session: ${resumeId}`);
+} else {
+  setup = await chairJson("setup", `You are the neutral Chair of Roast Room. Seven simulated seats: Bezos=strategy/reversibility, Graham=product/startups, Hormozi=offers/pricing/sales, Gary V=marketing/attention, Martell=people/founder time, Wickman=operations/scaling, Buffett=money/capital.\n\nFounder prompt:\n${prompt}\n\nCreate a faithful decision brief using only supplied facts. Do not invent facts; put necessary gaps in assumptions. Options must be 2 to 4 entries and use ids A, B, C, D in order. Include status quo/do-not-do-it and a smaller reversible version where sensible. Give every seat weight 1-3, exactly one or two seats at weight 3. quick_seats must be four unique seats: two most relevant, Bezos or Buffett as downside check, and a likely dissenter.`);
+  const ids = ["A","B","C","D"];
+  setup.options = (setup.options || []).slice(0,4).map((o,i) => ({ id: ids[i], label: String(o.label || o.id || `Option ${ids[i]}`) }));
+  if (setup.options.length < 2) throw new Error("Chair returned fewer than two options");
+  const weights = Object.fromEntries(SEATS.map((s)=>[s.key,{weight:1,reason:""}]));
+  for (const w of setup.weights || []) if (weights[w.seat]) weights[w.seat] = { weight: Math.max(1,Math.min(3,w.weight)), reason:w.reason };
+  let seats = mode === "quick" ? [...new Set(setup.quick_seats || [])].filter((k)=>byKey[k]).slice(0,4) : SEATS.map((s)=>s.key);
+  for (const s of SEATS) if (mode === "quick" && seats.length < 4 && !seats.includes(s.key)) seats.push(s.key);
+  const id = forcedId || `${new Date().toISOString().slice(0,10)}-${slugify(setup.title)}-hybrid`;
+  dir = path.join(SESSIONS,id); let bump=2;
+  if (!forcedId) while (fs.existsSync(dir)) dir = path.join(SESSIONS,`${id}-${bump++}`);
+  else if (fs.existsSync(dir)) throw new Error(`Session already exists: ${id}`);
+  fs.mkdirSync(dir,{recursive:true});
+  st = { ...setup, weights, seats, dir, cards:{1:{},2:{},3:{}}, scores:{} };
+  writeText(path.join(dir,"brief.md"), briefMarkdown(st));
+  writeJson(path.join(dir,"council.json"), { title:st.title, decision:st.decision, mode, options:st.options, weights:st.weights, seats:st.seats, brief:st.brief, assumptions:st.assumptions, runner:"hybrid", providers:{seats:"gemini-cli",chair:CHAIR_PROVIDER === "gemini" ? "gemini-cli" : "github-copilot-student"} });
+  writeJson(path.join(dir,"hybrid-meta.json"), { created:new Date().toISOString(), mode, providers:{seats:"gemini-cli",chair_requested:CHAIR_PROVIDER}, gemini_model:GEMINI_MODEL||"cli-default", concurrency:CONCURRENCY });
+}
+console.log(`Hybrid Roast Room: ${mode} council${resumeId ? " (resume)" : ""}`);
 console.log(`Chair: ${CHAIR_PROVIDER === "gemini" ? "Gemini (test/fallback mode)" : "GitHub Copilot Student (Gemini fallback)"} | Seats: Gemini | Seat concurrency:`, CONCURRENCY);
-
-const setup = await chairJson("setup", `You are the neutral Chair of Roast Room. Seven simulated seats: Bezos=strategy/reversibility, Graham=product/startups, Hormozi=offers/pricing/sales, Gary V=marketing/attention, Martell=people/founder time, Wickman=operations/scaling, Buffett=money/capital.\n\nFounder prompt:\n${prompt}\n\nCreate a faithful decision brief using only supplied facts. Do not invent facts; put necessary gaps in assumptions. Options must be 2 to 4 entries and use ids A, B, C, D in order. Include status quo/do-not-do-it and a smaller reversible version where sensible. Give every seat weight 1-3, exactly one or two seats at weight 3. quick_seats must be four unique seats: two most relevant, Bezos or Buffett as downside check, and a likely dissenter.`);
-const ids = ["A","B","C","D"];
-setup.options = (setup.options || []).slice(0,4).map((o,i) => ({ id: ids[i], label: String(o.label || o.id || `Option ${ids[i]}`) }));
-if (setup.options.length < 2) throw new Error("Chair returned fewer than two options");
-const weights = Object.fromEntries(SEATS.map((s)=>[s.key,{weight:1,reason:""}]));
-for (const w of setup.weights || []) if (weights[w.seat]) weights[w.seat] = { weight: Math.max(1,Math.min(3,w.weight)), reason:w.reason };
-let seats = mode === "quick" ? [...new Set(setup.quick_seats || [])].filter((k)=>byKey[k]).slice(0,4) : SEATS.map((s)=>s.key);
-for (const s of SEATS) if (mode === "quick" && seats.length < 4 && !seats.includes(s.key)) seats.push(s.key);
-const id = forcedId || `${new Date().toISOString().slice(0,10)}-${slugify(setup.title)}-hybrid`;
-let dir = path.join(SESSIONS,id), bump=2;
-if (!forcedId) while (fs.existsSync(dir)) dir = path.join(SESSIONS,`${id}-${bump++}`);
-else if (fs.existsSync(dir)) throw new Error(`Session already exists: ${id}`);
-fs.mkdirSync(dir,{recursive:true});
-const st = { ...setup, weights, seats, dir, cards:{1:{},2:{},3:{}}, scores:{} };
-writeText(path.join(dir,"brief.md"), briefMarkdown(st));
-writeJson(path.join(dir,"council.json"), { title:st.title, decision:st.decision, mode, options:st.options, weights:st.weights, seats:st.seats, brief:st.brief, assumptions:st.assumptions, runner:"hybrid", providers:{seats:"gemini-cli",chair:CHAIR_PROVIDER === "gemini" ? "gemini-cli" : "github-copilot-student"} });
-writeJson(path.join(dir,"hybrid-meta.json"), { created:new Date().toISOString(), mode, providers:{seats:"gemini-cli",chair_requested:CHAIR_PROVIDER}, gemini_model:GEMINI_MODEL||"cli-default", concurrency:CONCURRENCY });
 console.log("Session:", dir);
 console.log("Watch: http://localhost:4730");
 
 console.log("Round 1...");
 await runRound(st,1,round1Task);
-const crux = await chairJson("cruxes", `You are the neutral Chair. Do not argue a side.\n\n${briefBlock(st)}\n\nROUND 1 CARDS\n${cardsBlock(st,1)}\n\nIdentify 1-3 underlying cruxes explaining the split. For each side use seat keys only. If every seat chose the same top option and scores are within 1, set unanimous=true and force the strongest unargued alternative into a crux. pressure contains only minority/unanimity-challenge seats and the argument they must answer.`);
+let crux;
+const cruxPath = path.join(dir,"cruxes.json");
+if (fs.existsSync(cruxPath)) {
+  crux = JSON.parse(fs.readFileSync(cruxPath,"utf8"));
+  console.log("Cruxes: reusing saved Chair analysis.");
+} else {
+  crux = await chairJson("cruxes", `You are the neutral Chair. Do not argue a side.\n\n${briefBlock(st)}\n\nROUND 1 CARDS\n${cardsBlock(st,1)}\n\nIdentify 1-3 underlying cruxes explaining the split. For each side use seat keys only. If every seat chose the same top option and scores are within 1, set unanimous=true and force the strongest unargued alternative into a crux. pressure contains only minority/unanimity-challenge seats and the argument they must answer.`);
+  writeJson(cruxPath,crux);
+}
 st.cruxes=crux.cruxes; st.pressure=Object.fromEntries((crux.pressure||[]).map((x)=>[x.seat,x.ask]));
 writeRound(st,1,`${crux.note}\n\n${crux.cruxes.map((c,i)=>`${i+1}. ${c.question}`).join("\n")}`);
-writeJson(path.join(dir,"cruxes.json"),crux);
+writeRoundState(st,1);
 
 console.log("Round 2...");
 const s2=await runRound(st,2,round2Task);
 writeRound(st,2,`Interim scores: ${st.options.map((o)=>`${o.id} ${s2[o.id]?.score}`).join(" · ")}`);
-let round=2, draft=null;
+writeRoundState(st,2);
+let round=2, draft=st.draft||null;
 const top2=Object.entries(s2).sort((a,b)=>(b[1].score??-1)-(a[1].score??-1))[0][0];
 const vals2=st.seats.map((k)=>st.cards[2][k]?.parsed.optionScores[top2]).filter(Number.isFinite);
 const spread2=vals2.length?Math.max(...vals2)-Math.min(...vals2):0;
 const ruin2=st.seats.some((k)=>st.cards[2][k]?.parsed.ruin==="likely");
 const skip3=mode==="quick"&&spread2<=3&&!ruin2;
 if(!skip3){
-  draft=await chairJson("draft",`You are the neutral Chair.\n\n${briefBlock(st)}\n\nROUND 2 CARDS\n${cardsBlock(st,2)}\n\nComputed scores: ${JSON.stringify(Object.fromEntries(Object.entries(s2).map(([k,v])=>[k,v.score])))}. Band rules: 7.5+ GO; 6.0-7.4 GO WITH CONDITIONS; 4.5-5.9 RESHAPE; under 4.5 DON'T DO IT. WAIT when a good option needs an unmet prerequisite. RUIN RISK likely caps at RESHAPE until mitigated. Draft a resolution with merged, checkable conditions, dated next steps, cheapest test, kill criteria.`);
-  st.draft=draft; writeText(path.join(dir,"draft-resolution.md"),draftMarkdown(draft)); writeJson(path.join(dir,"draft.json"),draft);
+  if (!draft) {
+    draft=await chairJson("draft",`You are the neutral Chair.\n\n${briefBlock(st)}\n\nROUND 2 CARDS\n${cardsBlock(st,2)}\n\nComputed scores: ${JSON.stringify(Object.fromEntries(Object.entries(s2).map(([k,v])=>[k,v.score])))}. Band rules: 7.5+ GO; 6.0-7.4 GO WITH CONDITIONS; 4.5-5.9 RESHAPE; under 4.5 DON'T DO IT. WAIT when a good option needs an unmet prerequisite. RUIN RISK likely caps at RESHAPE until mitigated. Draft a resolution with merged, checkable conditions, dated next steps, cheapest test, kill criteria.`);
+    st.draft=draft; writeText(path.join(dir,"draft-resolution.md"),draftMarkdown(draft)); writeJson(path.join(dir,"draft.json"),draft);
+  } else console.log("Draft: reusing saved Chair resolution.");
   console.log("Round 3..."); await runRound(st,3,round3Task); round=3;
-  writeRound(st,3,"Final ratification round complete.");
+  writeRound(st,3,"Final ratification round complete."); writeRoundState(st,3);
 } else console.log(`Quick mode: skipping Round 3 (spread ${spread2}, no likely ruin risk).`);
 
 const stats=finalStats(st,round);

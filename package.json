@@ -9,7 +9,9 @@
     "smoke": "node app/scripts/smoke.mjs",
     "hybrid": "node hybrid/runner.mjs",
     "hybrid:quick": "node hybrid/runner.mjs --quick",
-    "check": "node --check app/server.mjs && node --check app/public/app.js && node --check hybrid/runner.mjs && node --check scripts/ci-smoke.mjs",
+    "hybrid:resume": "node hybrid/runner.mjs --resume",
+    "resume:smoke": "node scripts/hybrid-resume-smoke.mjs",
+    "check": "node --check app/server.mjs && node --check app/public/app.js && node --check hybrid/runner.mjs && node --check scripts/ci-smoke.mjs && node --check scripts/hybrid-resume-smoke.mjs",
     "ci:smoke": "node scripts/ci-smoke.mjs"
   },
   "engines": {
