@@ -62,8 +62,14 @@ try {
   if (!stop.ok || stopped.status !== "stopped" || !stopped.resumable) throw new Error(`stop failed: ${stop.status} ${JSON.stringify(stopped)}`);
   await sleep(250);
   s = await findSmoke();
-  if (!s?.resumable || s.stoppable) throw new Error(`bad stopped state: ${JSON.stringify(s)}`);
-  console.log("Hybrid server smoke OK: progress=Openings 2/4, resume->running, stop->resumable");
+  if (!s?.resumable || s.stoppable || s.failure) throw new Error(`bad stopped state: ${JSON.stringify(s)}`);
+
+  fs.writeFileSync(dummy, "console.error('SMOKE_FAILURE'); process.exit(7);\n");
+  await fetch(`${base}/api/sessions/${id}/resume`, { method: "POST" });
+  await sleep(800);
+  s = await findSmoke();
+  if (!s?.resumable || s.stoppable || !s.failure?.message) throw new Error(`failure was not persisted: ${JSON.stringify(s)}`);
+  console.log("Hybrid server smoke OK: progress, active stop, resumability, and persisted failure all pass");
 } finally {
   child.kill();
   fs.rmSync(dir, { recursive: true, force: true });

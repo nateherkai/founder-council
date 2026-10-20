@@ -109,7 +109,8 @@ function updateRunControls(ss) {
   }
   const bits = [];
   if (current.progress?.label) bits.push(current.progress.label);
-  if (current.status === "stopped") bits.push("stopped · safe to resume");
+  if (current.failure) bits.push("failed · safe to resume");
+  else if (current.status === "stopped") bits.push("stopped · safe to resume");
   else if (current.stoppable) bits.push("running");
   status.textContent = bits.join(" · ");
   stop.hidden = !current.stoppable;
@@ -729,7 +730,9 @@ async function openHistory() {
   $("#historyList").innerHTML = sessions.length
     ? sessions.map((s) => {
         const progress = s.progress?.label ? ` · ${esc(s.progress.label)}` : "";
-        return `<li><button data-id="${esc(s.id)}"><b>${esc(s.title)}</b><small>${esc(s.id.slice(0, 10))} · ${esc(s.mode)} · ${esc(s.status)}${progress}</small></button>${s.stoppable ? `<button class="stop" type="button" data-stop="${esc(s.id)}" title="Stop this Hybrid council and keep its checkpoints">Stop</button>` : ""}${s.resumable ? `<button class="resume" type="button" data-resume="${esc(s.id)}" title="Continue this interrupted Hybrid council">Resume</button>` : ""}${s.status === "done" ? `<button class="pdf" type="button" data-pdf="${esc(s.id)}" title="Download the verdict as a PDF">PDF</button>` : ""}</li>`;
+        const failure = s.failure?.message ? " · failed" : "";
+        const failureTitle = s.failure?.message ? ` title="${esc(shorten(s.failure.message, 240))}"` : "";
+        return `<li><button data-id="${esc(s.id)}"${failureTitle}><b>${esc(s.title)}</b><small>${esc(s.id.slice(0, 10))} · ${esc(s.mode)} · ${esc(s.status)}${progress}${failure}</small></button>${s.stoppable ? `<button class="stop" type="button" data-stop="${esc(s.id)}" title="Stop this Hybrid council and keep its checkpoints">Stop</button>` : ""}${s.resumable ? `<button class="resume" type="button" data-resume="${esc(s.id)}" title="Continue this interrupted Hybrid council">Resume</button>` : ""}${s.status === "done" ? `<button class="pdf" type="button" data-pdf="${esc(s.id)}" title="Download the verdict as a PDF">PDF</button>` : ""}</li>`;
       }).join("")
     : '<li class="muted">No sessions yet. Convene the council once and it shows up here.</li>';
   $$("#historyList button[data-id]").forEach((b) => b.addEventListener("click", () => { $("#historyDialog").close(); replay(b.dataset.id); }));
