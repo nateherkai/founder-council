@@ -28,9 +28,19 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: PowerShell launcher smoke test
         shell: powershell
         run: .\scripts\launcher-smoke.ps1
+      - name: Local backup smoke test
+        shell: powershell
+        run: |
+          $backup = & .\scripts\backup-roast-room.ps1 -Destination "$env:RUNNER_TEMP\roast-room-backups"
+          if (-not (Test-Path (Join-Path $backup 'repo.bundle'))) { throw 'repo.bundle missing' }
+          if (-not (Test-Path (Join-Path $backup 'sessions.zip'))) { throw 'sessions.zip missing' }
+          if (Test-Path (Join-Path $backup '.env')) { throw '.env must be excluded by default' }
+          Write-Host "Backup smoke OK: $backup"

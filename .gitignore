@@ -1,5 +1,6 @@
 .env
 node_modules/
+backups/
 .DS_Store
 hybrid/*.log
 hybrid/*-smoke.*

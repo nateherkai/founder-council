@@ -84,6 +84,14 @@ This checkout also includes `hybrid/`, which lets you type a decision directly i
 
 On this 8 GB machine the tested settings are `GEMINI_MODEL=gemini-2.5-flash` and `GEMINI_CONCURRENCY=1`. The hybrid runner loads `.env` automatically and checkpoints each completed round card so interrupted councils can resume with `npm run hybrid:resume -- SESSION_ID` instead of rerunning completed work. In Hybrid mode, resumable sessions also get a **Resume** button in **Past sessions**; active Hybrid sessions show saved progress and a **Stop council** control that preserves checkpoints for later Resume. Unexpected Hybrid runner failures are persisted and shown in session history instead of disappearing as an unexplained stop. See `hybrid/README.md` for the terminal commands and architecture.
 
+## Back up local councils
+
+Your personal `sessions/` are intentionally kept out of Git, so use the Windows backup helper when you want an offline recovery point:
+
+`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/backup-roast-room.ps1`
+
+It creates an ignored `backups/roast-room-<timestamp>/` folder with a verified `repo.bundle`, `sessions.zip`, a manifest, and restore instructions. `.env` is excluded by default so local credentials are not copied. Add `-IncludeEnv` only when you intentionally want the local configuration included in that backup.
+
 ## Optional: Anthropic API runner
 
 If you'd rather use the original API runner, copy `.env.example` to `.env`, add an `ANTHROPIC_API_KEY`, set `COUNCIL_RUNNER=api`, and restart `npm start`. That mode bills your Anthropic API account (about 25 calls per full council).
