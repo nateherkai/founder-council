@@ -30,6 +30,7 @@ const NPM_BIN = path.join(process.env.APPDATA || path.join(process.env.USERPROFI
 const GEMINI = process.env.GEMINI_CLI_ENTRY || path.join(NPM_BIN, "node_modules", "@google", "gemini-cli", "bundle", "gemini.js");
 const COPILOT_DEFAULT = path.join(process.env.LOCALAPPDATA || "", "Microsoft", "WinGet", "Packages", "GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe", "copilot.exe");
 const COPILOT = process.env.COPILOT_CLI || (fs.existsSync(COPILOT_DEFAULT) ? COPILOT_DEFAULT : "copilot.exe");
+const COPILOT_ENTRY = process.env.COPILOT_CLI_ENTRY || "";
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "";
 const CHAIR_PROVIDER = (process.env.CHAIR_PROVIDER || "copilot").toLowerCase();
 const CONCURRENCY = Math.max(1, Math.min(4, Number(process.env.GEMINI_CONCURRENCY || 2)));
@@ -39,6 +40,8 @@ function boundedInt(value, fallback, min, max) {
 }
 const SEAT_RETRIES = boundedInt(process.env.GEMINI_SEAT_RETRIES, 1, 0, 2);
 const RETRY_BASE_MS = boundedInt(process.env.GEMINI_RETRY_BASE_MS, 1500, 250, 30000);
+const GEMINI_TIMEOUT_MS = boundedInt(process.env.GEMINI_TIMEOUT_MS, 10 * 60_000, 50, 60 * 60_000);
+const COPILOT_TIMEOUT_MS = boundedInt(process.env.COPILOT_TIMEOUT_MS, 3 * 60_000, 50, 60 * 60_000);
 const DISCLAIMER = "Simulated advisors built from each person's public work. They are not the people and do not speak for them.";
 
 const argv = process.argv.slice(2);
@@ -129,7 +132,7 @@ function runProcess(entry, args, input, timeoutMs = 8 * 60_000) {
 async function geminiText(task) {
   const args = ["-p", "Use the instructions and task supplied on stdin. Output only the requested answer, with no markdown fence.", "--approval-mode", "plan", "--skip-trust", "-o", "text"];
   if (GEMINI_MODEL) args.push("-m", GEMINI_MODEL);
-  const { out } = await runProcess(GEMINI, args, task, 10 * 60_000);
+  const { out } = await runProcess(GEMINI, args, task, GEMINI_TIMEOUT_MS);
   return cleanText(out);
 }
 
@@ -176,7 +179,9 @@ async function copilotJson(kind, task) {
     "--silent", "--mode", "plan", "--no-custom-instructions", "--disable-builtin-mcps",
     "--allow-all-tools", "--excluded-tools", "shell", "write", "--deny-tool", "shell", "--deny-tool", "write", "--no-remote", "--no-remote-export"
   ];
-  const { out } = await runExecutable(COPILOT, args, "", 3 * 60_000);
+  const { out } = COPILOT_ENTRY
+    ? await runProcess(COPILOT_ENTRY, args, "", COPILOT_TIMEOUT_MS)
+    : await runExecutable(COPILOT, args, "", COPILOT_TIMEOUT_MS);
   return parseJsonOutput(out);
 }
 

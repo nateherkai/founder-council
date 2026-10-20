@@ -27,6 +27,8 @@ jobs:
         run: npm run telemetry:smoke
       - name: Hybrid retry policy smoke test
         run: npm run retry:smoke
+      - name: Hybrid deterministic fault-injection matrix
+        run: npm run fault:smoke
       - name: Hybrid server progress/stop smoke test
         run: npm run hybrid:server:smoke
 
@@ -50,3 +52,6 @@ jobs:
           if (-not (Test-Path (Join-Path $backup 'sessions.zip'))) { throw 'sessions.zip missing' }
           if (Test-Path (Join-Path $backup '.env')) { throw '.env must be excluded by default' }
           Write-Host "Backup smoke OK: $backup"
+      - name: One-click updater regression smoke test
+        shell: powershell
+        run: .\scripts\updater-helper-smoke.ps1
