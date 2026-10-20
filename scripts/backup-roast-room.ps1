@@ -35,8 +35,11 @@ if ($IncludeEnv -and (Test-Path (Join-Path $repo ".env"))) {
   $envIncluded = $true
 }
 
-$head = (& git -C $repo rev-parse HEAD).Trim()
-$branch = (& git -C $repo branch --show-current).Trim()
+$headLines = @(& git -C $repo rev-parse HEAD)
+$head = ($headLines -join "").Trim()
+$branchLines = @(& git -C $repo branch --show-current)
+$branch = ($branchLines -join "").Trim()
+if (-not $branch) { $branch = "DETACHED" }
 $sessionCount = @(Get-ChildItem $sessionsDir -Directory -ErrorAction SilentlyContinue).Count
 $manifest = [ordered]@{
   created_at = (Get-Date).ToString("o")
