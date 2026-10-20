@@ -28,6 +28,8 @@ Resume an interrupted hybrid session without rerunning completed seats or Chair 
 
 `npm run hybrid:resume -- SESSION_ID`
 
+In Hybrid mode, interrupted Hybrid sessions also show a **Resume** button in **Past sessions**, so the same recovery path can be started from the room UI.
+
 The runner loads `.env` itself before it resolves providers, models, and concurrency. Explicit process environment variables still take precedence. Each completed seat card is checkpointed to `round-N.json`, and older interrupted sessions that only have `round-N.md` are reconstructed automatically when possible.
 
 ## Architecture and safety

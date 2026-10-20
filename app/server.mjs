@@ -37,22 +37,53 @@ function waitForHybridSetup(id, child, timeoutMs = 120000) {
   });
 }
 
-async function startHybrid(prompt, mode) {
-  if (hybridProcess && hybridProcess.exitCode == null) throw new Error("A Hybrid council is already running.");
-  const id = `${new Date().toISOString().slice(0, 10)}-hybrid-${Date.now().toString(36)}`;
-  const args = [path.join(REPO_ROOT, "hybrid", "runner.mjs"), mode === "quick" ? "--quick" : "--full", "--session-id", id, prompt];
+function hybridChildEnv() {
   const childEnv = { ...process.env };
   for (const key of ["CHAIR_PROVIDER", "GEMINI_CONCURRENCY", "GEMINI_MODEL", "GEMINI_CLI_ENTRY", "COPILOT_CLI"]) {
     const value = env(key);
     if (value) childEnv[key] = value;
   }
-  const child = spawn(process.execPath, args, { cwd: REPO_ROOT, windowsHide: true, env: childEnv });
+  return childEnv;
+}
+
+function wireHybridChild(child, id) {
   hybridProcess = child;
   hybridRunning = id;
   child.stdout.on("data", (d) => process.stdout.write(`[hybrid] ${d}`));
   child.stderr.on("data", (d) => process.stderr.write(`[hybrid] ${d}`));
-  child.on("exit", () => { if (hybridProcess === child) { hybridProcess = null; hybridRunning = null; } });
+  child.on("exit", (code) => {
+    if (code) watch.stop(id);
+    if (hybridProcess === child) { hybridProcess = null; hybridRunning = null; }
+  });
+}
+
+function isHybridResumable(id) {
+  if (!/^[a-zA-Z0-9._-]+$/.test(id || "")) return false;
+  const dir = path.join(SESSIONS_DIR, id);
+  const councilPath = path.join(dir, "council.json");
+  if (!fs.existsSync(councilPath) || fs.existsSync(path.join(dir, "verdict.json"))) return false;
+  try { return JSON.parse(fs.readFileSync(councilPath, "utf8")).runner === "hybrid"; }
+  catch { return false; }
+}
+
+async function startHybrid(prompt, mode) {
+  if (hybridProcess && hybridProcess.exitCode == null) throw new Error("A Hybrid council is already running.");
+  const id = `${new Date().toISOString().slice(0, 10)}-hybrid-${Date.now().toString(36)}`;
+  const args = [path.join(REPO_ROOT, "hybrid", "runner.mjs"), mode === "quick" ? "--quick" : "--full", "--session-id", id, prompt];
+  const child = spawn(process.execPath, args, { cwd: REPO_ROOT, windowsHide: true, env: hybridChildEnv() });
+  wireHybridChild(child, id);
   await waitForHybridSetup(id, child);
+  return id;
+}
+
+async function resumeHybrid(id) {
+  if (hybridProcess && hybridProcess.exitCode == null) throw new Error("A Hybrid council is already running.");
+  if (!isHybridResumable(id)) throw new Error("This session cannot be resumed.");
+  const args = [path.join(REPO_ROOT, "hybrid", "runner.mjs"), "--resume", id];
+  const child = spawn(process.execPath, args, { cwd: REPO_ROOT, windowsHide: true, env: hybridChildEnv() });
+  wireHybridChild(child, id);
+  watch.resume(id);
+  await new Promise((resolve, reject) => setTimeout(() => child.exitCode && child.exitCode !== 0 ? reject(new Error(`Hybrid resume exited early (code ${child.exitCode}).`)) : resolve(), 200));
   return id;
 }
 
@@ -99,9 +130,19 @@ const server = http.createServer(async (req, res) => {
       return subscribe(s, res);
     }
     if (p === "/api/sessions") {
-      const all = [...listSaved(), ...watch.listLive()].sort((a, b) => (a.id < b.id ? 1 : -1));
       const active = RUNNER === "hybrid" ? hybridRunning : (running && getSession(running)?.status === "running" ? running : null);
+      const all = [...listSaved(), ...watch.listLive()]
+        .map((s) => ({ ...s, resumable: RUNNER === "hybrid" && s.id !== active && isHybridResumable(s.id) }))
+        .sort((a, b) => (a.id < b.id ? 1 : -1));
       return send(res, 200, { sessions: all, running: active, live: watch.runningId() });
+    }
+    const resumeMatch = p.match(/^\/api\/sessions\/([^/]+)\/resume$/);
+    if (resumeMatch && req.method === "POST") {
+      if (RUNNER !== "hybrid") return send(res, 403, { error: "Resume is only available in Hybrid mode." });
+      const id = decodeURIComponent(resumeMatch[1]);
+      if (!isHybridResumable(id)) return send(res, 409, { error: "This session is complete, invalid, or not a Hybrid session." });
+      const resumed = await resumeHybrid(id);
+      return send(res, 200, { id: resumed });
     }
     if (p.startsWith("/api/sessions/")) {
       const id = decodeURIComponent(p.split("/").pop());

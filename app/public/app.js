@@ -703,10 +703,30 @@ function onVerdict(ev) {
 async function openHistory() {
   const { sessions } = await fetch("/api/sessions").then((x) => x.json());
   $("#historyList").innerHTML = sessions.length
-    ? sessions.map((s) => `<li><button data-id="${esc(s.id)}"><b>${esc(s.title)}</b><small>${esc(s.id.slice(0, 10))} · ${esc(s.mode)} · ${esc(s.status)}</small></button>${s.status === "done" ? `<button class="pdf" type="button" data-pdf="${esc(s.id)}" title="Download the verdict as a PDF">PDF</button>` : ""}</li>`).join("")
+    ? sessions.map((s) => `<li><button data-id="${esc(s.id)}"><b>${esc(s.title)}</b><small>${esc(s.id.slice(0, 10))} · ${esc(s.mode)} · ${esc(s.status)}</small></button>${s.resumable ? `<button class="resume" type="button" data-resume="${esc(s.id)}" title="Continue this interrupted Hybrid council">Resume</button>` : ""}${s.status === "done" ? `<button class="pdf" type="button" data-pdf="${esc(s.id)}" title="Download the verdict as a PDF">PDF</button>` : ""}</li>`).join("")
     : '<li class="muted">No sessions yet. Convene the council once and it shows up here.</li>';
   $$("#historyList button[data-id]").forEach((b) => b.addEventListener("click", () => { $("#historyDialog").close(); replay(b.dataset.id); }));
+  $$("#historyList button[data-resume]").forEach((b) => b.addEventListener("click", () => resumeSession(b)));
   $("#historyDialog").showModal();
+}
+
+async function resumeSession(btn) {
+  const id = btn.dataset.resume;
+  btn.disabled = true;
+  const old = btn.textContent;
+  btn.textContent = "Resuming...";
+  try {
+    const r = await fetch(`/api/sessions/${encodeURIComponent(id)}/resume`, { method: "POST" });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || "Could not resume this council.");
+    $("#historyDialog").close();
+    attach(j.id);
+  } catch (e) {
+    toast(e.message || String(e));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = old;
+  }
 }
 
 async function replay(id) {

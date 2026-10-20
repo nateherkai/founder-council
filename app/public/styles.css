@@ -481,7 +481,10 @@ button { font: inherit; cursor: pointer; }
 .v-top .actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .history li { display: flex; gap: 8px; align-items: stretch; }
 .history li > button:first-child { flex: 1; }
-.history .pdf { flex: none; width: auto; padding: 0 14px; font-size: 12px; font-weight: 600; color: var(--ink-soft); text-align: center; }
+.history .pdf, .history .resume { flex: none; width: auto; padding: 0 14px; font-size: 12px; font-weight: 600; text-align: center; }
+.history .pdf { color: var(--ink-soft); }
+.history .resume { color: var(--ink); border-color: var(--accent); }
+.history .resume:disabled { opacity: .6; cursor: progress; }
 .top-actions .ghost { white-space: nowrap; }
 @media (max-width: 820px) {
   .top-actions { margin-left: auto; }
