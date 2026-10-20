@@ -15,8 +15,10 @@
     "telemetry:smoke": "node scripts/hybrid-telemetry-smoke.mjs",
     "retry:smoke": "node scripts/hybrid-retry-smoke.mjs",
     "fault:smoke": "node scripts/hybrid-fault-injection-smoke.mjs",
+    "telemetry:report": "node scripts/hybrid-telemetry-report.mjs",
+    "telemetry:report:smoke": "node scripts/hybrid-telemetry-report-smoke.mjs",
     "hybrid:server:smoke": "node scripts/hybrid-server-smoke.mjs",
-    "check": "node --check app/server.mjs && node --check app/lib/watch.mjs && node --check app/public/app.js && node --check hybrid/runner.mjs && node --check hybrid/telemetry.mjs && node --check hybrid/retry.mjs && node --check scripts/ci-smoke.mjs && node --check scripts/hybrid-resume-smoke.mjs && node --check scripts/hybrid-crash-resume-smoke.mjs && node --check scripts/hybrid-telemetry-smoke.mjs && node --check scripts/hybrid-retry-smoke.mjs && node --check scripts/hybrid-fault-injection-smoke.mjs && node --check scripts/hybrid-server-smoke.mjs",
+    "check": "node --check app/server.mjs && node --check app/lib/watch.mjs && node --check app/public/app.js && node --check hybrid/runner.mjs && node --check hybrid/telemetry.mjs && node --check hybrid/retry.mjs && node --check scripts/ci-smoke.mjs && node --check scripts/hybrid-resume-smoke.mjs && node --check scripts/hybrid-crash-resume-smoke.mjs && node --check scripts/hybrid-telemetry-smoke.mjs && node --check scripts/hybrid-retry-smoke.mjs && node --check scripts/hybrid-fault-injection-smoke.mjs && node --check scripts/hybrid-telemetry-report.mjs && node --check scripts/hybrid-telemetry-report-smoke.mjs && node --check scripts/hybrid-server-smoke.mjs",
     "ci:smoke": "node scripts/ci-smoke.mjs"
   },
   "engines": {

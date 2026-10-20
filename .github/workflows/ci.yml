@@ -29,6 +29,8 @@ jobs:
         run: npm run retry:smoke
       - name: Hybrid deterministic fault-injection matrix
         run: npm run fault:smoke
+      - name: Hybrid telemetry reporting smoke test
+        run: npm run telemetry:report:smoke
       - name: Hybrid server progress/stop smoke test
         run: npm run hybrid:server:smoke
 
