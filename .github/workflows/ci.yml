@@ -21,6 +21,12 @@ jobs:
         run: npm run ci:smoke
       - name: Hybrid resume smoke test
         run: npm run resume:smoke
+      - name: Hybrid crash/resume smoke test
+        run: npm run crash:resume:smoke
+      - name: Hybrid telemetry smoke test
+        run: npm run telemetry:smoke
+      - name: Hybrid retry policy smoke test
+        run: npm run retry:smoke
       - name: Hybrid server progress/stop smoke test
         run: npm run hybrid:server:smoke
 

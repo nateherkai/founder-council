@@ -109,6 +109,10 @@ function updateRunControls(ss) {
   }
   const bits = [];
   if (current.progress?.label) bits.push(current.progress.label);
+  if (current.metrics) {
+    const m = current.metrics;
+    bits.push(`${clock(m.duration_ms)} · ${m.provider_calls} calls${m.retries ? ` · ${m.retries} retries` : ""}${m.fallbacks ? ` · ${m.fallbacks} fallback` : ""}`);
+  }
   if (current.failure) bits.push("failed · safe to resume");
   else if (current.status === "stopped") bits.push("stopped · safe to resume");
   else if (current.stoppable) bits.push("running");
@@ -732,7 +736,10 @@ async function openHistory() {
         const progress = s.progress?.label ? ` · ${esc(s.progress.label)}` : "";
         const failure = s.failure?.message ? " · failed" : "";
         const failureTitle = s.failure?.message ? ` title="${esc(shorten(s.failure.message, 240))}"` : "";
-        return `<li><button data-id="${esc(s.id)}"${failureTitle}><b>${esc(s.title)}</b><small>${esc(s.id.slice(0, 10))} · ${esc(s.mode)} · ${esc(s.status)}${progress}${failure}</small></button>${s.stoppable ? `<button class="stop" type="button" data-stop="${esc(s.id)}" title="Stop this Hybrid council and keep its checkpoints">Stop</button>` : ""}${s.resumable ? `<button class="resume" type="button" data-resume="${esc(s.id)}" title="Continue this interrupted Hybrid council">Resume</button>` : ""}${s.status === "done" ? `<button class="pdf" type="button" data-pdf="${esc(s.id)}" title="Download the verdict as a PDF">PDF</button>` : ""}</li>`;
+        const metrics = s.metrics
+          ? ` · ${clock(s.metrics.duration_ms)} · ${s.metrics.provider_calls} calls${s.metrics.retries ? ` · ${s.metrics.retries} retries` : ""}${s.metrics.fallbacks ? ` · ${s.metrics.fallbacks} fallback` : ""}${s.metrics.failed_calls ? ` · ${s.metrics.failed_calls} provider errors` : ""}`
+          : "";
+        return `<li><button data-id="${esc(s.id)}"${failureTitle}><b>${esc(s.title)}</b><small>${esc(s.id.slice(0, 10))} · ${esc(s.mode)} · ${esc(s.status)}${progress}${failure}${metrics}</small></button>${s.stoppable ? `<button class="stop" type="button" data-stop="${esc(s.id)}" title="Stop this Hybrid council and keep its checkpoints">Stop</button>` : ""}${s.resumable ? `<button class="resume" type="button" data-resume="${esc(s.id)}" title="Continue this interrupted Hybrid council">Resume</button>` : ""}${s.status === "done" ? `<button class="pdf" type="button" data-pdf="${esc(s.id)}" title="Download the verdict as a PDF">PDF</button>` : ""}</li>`;
       }).join("")
     : '<li class="muted">No sessions yet. Convene the council once and it shows up here.</li>';
   $$("#historyList button[data-id]").forEach((b) => b.addEventListener("click", () => { $("#historyDialog").close(); replay(b.dataset.id); }));

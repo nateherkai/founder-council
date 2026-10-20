@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { classifyProviderError, createSessionTelemetry } from "./telemetry.mjs";
+import { retryDelayMs, shouldRetryProviderError } from "./retry.mjs";
 import { SEATS, byKey, systemFor, parseCard, checkQuotes } from "../app/lib/seats.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -31,6 +33,12 @@ const COPILOT = process.env.COPILOT_CLI || (fs.existsSync(COPILOT_DEFAULT) ? COP
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "";
 const CHAIR_PROVIDER = (process.env.CHAIR_PROVIDER || "copilot").toLowerCase();
 const CONCURRENCY = Math.max(1, Math.min(4, Number(process.env.GEMINI_CONCURRENCY || 2)));
+function boundedInt(value, fallback, min, max) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(min, Math.min(max, Math.trunc(parsed))) : fallback;
+}
+const SEAT_RETRIES = boundedInt(process.env.GEMINI_SEAT_RETRIES, 1, 0, 2);
+const RETRY_BASE_MS = boundedInt(process.env.GEMINI_RETRY_BASE_MS, 1500, 250, 30000);
 const DISCLAIMER = "Simulated advisors built from each person's public work. They are not the people and do not speak for them.";
 
 const argv = process.argv.slice(2);
@@ -49,6 +57,7 @@ for (const [label, value] of [["--session-id", forcedId], ["--resume", resumeId]
   if (value && !/^[a-zA-Z0-9._-]+$/.test(value)) throw new Error(`Invalid ${label}`);
 }
 if (resumeId && forcedId) throw new Error("Use either --resume or --session-id, not both");
+const telemetry = createSessionTelemetry({ resumed: Boolean(resumeId) });
 if (!prompt && !resumeId) {
   console.log("Usage: npm run hybrid -- [--quick|--full] [--session-id id] \"your business decision and context\"");
   console.log("   or: npm run hybrid -- --resume SESSION_ID");
@@ -61,8 +70,39 @@ function slugify(s) {
 function cleanText(s) {
   return String(s || "").replace(/^```(?:text|markdown)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
 }
-function writeJson(p, obj) { fs.writeFileSync(p, JSON.stringify(obj, null, 2) + "\n", "utf8"); }
-function writeText(p, text) { fs.writeFileSync(p, String(text).replace(/\r\n/g, "\n") + (String(text).endsWith("\n") ? "" : "\n"), "utf8"); }
+// Keep session checkpoints replaceable as a single filesystem operation.
+function atomicWriteFile(p, text) {
+  const tmp = `${p}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  try {
+    fs.writeFileSync(tmp, text, "utf8");
+    fs.renameSync(tmp, p);
+  } catch (error) {
+    try { fs.rmSync(tmp, { force: true }); } catch {}
+    throw error;
+  }
+}
+// Keep legacy and interrupted sessions recoverable when optional JSON is malformed.
+function readJsonFile(p) {
+  if (!fs.existsSync(p)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(p, "utf8"));
+  } catch (error) {
+    console.warn(`Ignoring invalid JSON checkpoint ${path.basename(p)}: ${error.message}`);
+    return null;
+  }
+}
+function writeJson(p, obj) { atomicWriteFile(p, JSON.stringify(obj, null, 2) + "\n"); }
+function writeText(p, text) {
+  const value = String(text);
+  atomicWriteFile(p, value.replace(/\r\n/g, "\n") + (value.endsWith("\n") ? "" : "\n"));
+}
+// Keep diagnostics best-effort so telemetry never blocks a council.
+function attachTelemetry(metaPath, base) {
+  telemetry.attach(base, (doc) => {
+    try { writeJson(metaPath, doc); }
+    catch (error) { console.warn(`Telemetry write failed: ${error.message}`); }
+  });
+}
 
 function runProcess(entry, args, input, timeoutMs = 8 * 60_000) {
   return new Promise((resolve, reject) => {
@@ -147,17 +187,36 @@ async function geminiJson(kind, task) {
 const chairProvidersUsed = new Set();
 async function chairJson(kind, task) {
   if (CHAIR_PROVIDER === "gemini") {
-    chairProvidersUsed.add("gemini-cli");
-    return geminiJson(kind, task);
+    const started = Date.now();
+    try {
+      const result = await geminiJson(kind, task);
+      telemetry.provider({ role: "chair", task: kind, provider: "gemini-cli", ok: true, duration_ms: Date.now() - started });
+      chairProvidersUsed.add("gemini-cli");
+      return result;
+    } catch (error) {
+      telemetry.provider({ role: "chair", task: kind, provider: "gemini-cli", ok: false, duration_ms: Date.now() - started, error_type: classifyProviderError(error) });
+      throw error;
+    }
   }
+  const copilotStarted = Date.now();
   try {
-    const x = await copilotJson(kind, task);
+    const result = await copilotJson(kind, task);
+    telemetry.provider({ role: "chair", task: kind, provider: "github-copilot-student", ok: true, duration_ms: Date.now() - copilotStarted });
     chairProvidersUsed.add("github-copilot-student");
-    return x;
-  } catch (e) {
-    console.warn(`Copilot Chair failed (${e.message}). Falling back to Gemini Chair.`);
-    chairProvidersUsed.add("gemini-cli-fallback");
-    return geminiJson(kind, task);
+    return result;
+  } catch (error) {
+    telemetry.provider({ role: "chair", task: kind, provider: "github-copilot-student", ok: false, duration_ms: Date.now() - copilotStarted, error_type: classifyProviderError(error) });
+    console.warn(`Copilot Chair failed (${error.message}). Falling back to Gemini Chair.`);
+    const fallbackStarted = Date.now();
+    try {
+      const result = await geminiJson(kind, task);
+      telemetry.provider({ role: "chair", task: kind, provider: "gemini-cli", ok: true, fallback: true, duration_ms: Date.now() - fallbackStarted });
+      chairProvidersUsed.add("gemini-cli-fallback");
+      return result;
+    } catch (fallbackError) {
+      telemetry.provider({ role: "chair", task: kind, provider: "gemini-cli", ok: false, fallback: true, duration_ms: Date.now() - fallbackStarted, error_type: classifyProviderError(fallbackError) });
+      throw fallbackError;
+    }
   }
 }
 
@@ -227,8 +286,8 @@ function writeRoundState(st, round) {
 }
 function loadRoundState(st, round) {
   const jsonPath = path.join(st.dir, `round-${round}.json`);
-  if (fs.existsSync(jsonPath)) {
-    const saved = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
+  const saved = readJsonFile(jsonPath);
+  if (saved) {
     st.cards[round] = saved.cards || {};
     st.scores[round] = saved.scores || scoreOptions(st, round);
     return;
@@ -267,6 +326,29 @@ function verdictMarkdown(st, v, stats, rounds) {
   return L.join("\n");
 }
 
+async function generateSeatCard(st, round, key, taskFn) {
+  const maxAttempts = 1 + SEAT_RETRIES;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const started = Date.now();
+    try {
+      const text = await geminiText(taskFn(st, key));
+      const parsed = parseCard(text, st.options.map((o)=>o.id));
+      if (Object.keys(parsed.optionScores).length < st.options.length) throw new Error(`${seatNames[key]} returned an invalid score card in round ${round}`);
+      telemetry.provider({ role: "seat", task: `round-${round}`, seat: key, provider: "gemini-cli", ok: true, attempt, duration_ms: Date.now() - started });
+      return { text, parsed };
+    } catch (error) {
+      const errorType = classifyProviderError(error);
+      const retryScheduled = attempt < maxAttempts && shouldRetryProviderError(errorType);
+      telemetry.provider({ role: "seat", task: `round-${round}`, seat: key, provider: "gemini-cli", ok: false, attempt, retry_scheduled: retryScheduled, duration_ms: Date.now() - started, error_type: errorType });
+      if (!retryScheduled) throw error;
+      const delay = retryDelayMs(attempt, RETRY_BASE_MS);
+      console.warn(`Gemini ${round}.${seatNames[key]} hit ${errorType}; retrying in ${delay}ms.`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+  throw new Error(`Gemini ${round}.${seatNames[key]} exhausted retry policy`);
+}
+
 async function runRound(st, round, taskFn) {
   st.cards[round] ||= {};
   const missing = st.seats.filter((key) => !st.cards[round][key]);
@@ -277,9 +359,7 @@ async function runRound(st, round, taskFn) {
   }
   await mapLimit(missing, CONCURRENCY, async (key) => {
     console.log(`  Gemini ${round}.${seatNames[key]}...`);
-    const text = await geminiText(taskFn(st, key));
-    const parsed = parseCard(text, st.options.map((o)=>o.id));
-    if (Object.keys(parsed.optionScores).length < st.options.length) throw new Error(`${seatNames[key]} returned an invalid score card in round ${round}`);
+    const { text, parsed } = await generateSeatCard(st, round, key, taskFn);
     st.cards[round][key] = { text, parsed, quotes: checkQuotes(key, text) };
     writeRound(st, round);
     writeRoundState(st, round);
@@ -294,10 +374,12 @@ if (resumeId) {
   dir = path.join(SESSIONS, resumeId);
   const councilPath = path.join(dir, "council.json");
   if (!fs.existsSync(councilPath)) throw new Error(`Cannot resume: missing council.json in ${resumeId}`);
-  const saved = JSON.parse(fs.readFileSync(councilPath, "utf8"));
+  const saved = readJsonFile(councilPath);
+  if (!saved) throw new Error(`Cannot resume: invalid council.json in ${resumeId}`);
   if (saved.runner !== "hybrid") throw new Error(`Cannot resume non-hybrid session: ${resumeId}`);
-  if (fs.existsSync(path.join(dir, "verdict.json"))) {
-    const done = JSON.parse(fs.readFileSync(path.join(dir, "verdict.json"), "utf8"));
+  const verdictPath = path.join(dir, "verdict.json");
+  const done = readJsonFile(verdictPath);
+  if (done && typeof done.label === "string" && typeof done.call === "string" && typeof done.recommended === "string") {
     console.log(`Session ${resumeId} is already complete.`);
     console.log("Verdict:", done.label, "|", done.call);
     console.log("Full report:", path.join(dir, "verdict.md"));
@@ -310,16 +392,17 @@ if (resumeId) {
   st = { ...setup, weights, seats, dir, cards:{1:{},2:{},3:{}}, scores:{} };
   for (const r of [1,2,3]) loadRoundState(st, r);
   const cruxPath = path.join(dir, "cruxes.json");
-  if (fs.existsSync(cruxPath)) {
-    const crux = JSON.parse(fs.readFileSync(cruxPath, "utf8"));
+  const crux = readJsonFile(cruxPath);
+  if (crux) {
     st.cruxes = crux.cruxes;
     st.pressure = Object.fromEntries((crux.pressure || []).map((x)=>[x.seat,x.ask]));
   }
   const draftPath = path.join(dir, "draft.json");
-  if (fs.existsSync(draftPath)) st.draft = JSON.parse(fs.readFileSync(draftPath, "utf8"));
+  const savedDraft = readJsonFile(draftPath);
+  if (savedDraft) st.draft = savedDraft;
   const metaPath = path.join(dir, "hybrid-meta.json");
-  const meta = fs.existsSync(metaPath) ? JSON.parse(fs.readFileSync(metaPath, "utf8")) : {};
-  writeJson(metaPath, { ...meta, resumed_at:new Date().toISOString(), gemini_model:GEMINI_MODEL||meta.gemini_model||"cli-default", concurrency:CONCURRENCY });
+  const meta = readJsonFile(metaPath) || {};
+  attachTelemetry(metaPath, { ...meta, resumed_at:new Date().toISOString(), gemini_model:GEMINI_MODEL||meta.gemini_model||"cli-default", concurrency:CONCURRENCY, seat_retries:SEAT_RETRIES, retry_base_ms:RETRY_BASE_MS });
   console.log(`Resuming session: ${resumeId}`);
 } else {
   setup = await chairJson("setup", `You are the neutral Chair of Roast Room. Seven simulated seats: Bezos=strategy/reversibility, Graham=product/startups, Hormozi=offers/pricing/sales, Gary V=marketing/attention, Martell=people/founder time, Wickman=operations/scaling, Buffett=money/capital.\n\nFounder prompt:\n${prompt}\n\nCreate a faithful decision brief using only supplied facts. Do not invent facts; put necessary gaps in assumptions. Options must be 2 to 4 entries and use ids A, B, C, D in order. Include status quo/do-not-do-it and a smaller reversible version where sensible. Give every seat weight 1-3, exactly one or two seats at weight 3. quick_seats must be four unique seats: two most relevant, Bezos or Buffett as downside check, and a likely dissenter.`);
@@ -338,19 +421,19 @@ if (resumeId) {
   st = { ...setup, weights, seats, dir, cards:{1:{},2:{},3:{}}, scores:{} };
   writeText(path.join(dir,"brief.md"), briefMarkdown(st));
   writeJson(path.join(dir,"council.json"), { title:st.title, decision:st.decision, mode, options:st.options, weights:st.weights, seats:st.seats, brief:st.brief, assumptions:st.assumptions, runner:"hybrid", providers:{seats:"gemini-cli",chair:CHAIR_PROVIDER === "gemini" ? "gemini-cli" : "github-copilot-student"} });
-  writeJson(path.join(dir,"hybrid-meta.json"), { created:new Date().toISOString(), mode, providers:{seats:"gemini-cli",chair_requested:CHAIR_PROVIDER}, gemini_model:GEMINI_MODEL||"cli-default", concurrency:CONCURRENCY });
+  const metaPath = path.join(dir,"hybrid-meta.json");
+  attachTelemetry(metaPath, { created:new Date().toISOString(), mode, providers:{seats:"gemini-cli",chair_requested:CHAIR_PROVIDER}, gemini_model:GEMINI_MODEL||"cli-default", concurrency:CONCURRENCY, seat_retries:SEAT_RETRIES, retry_base_ms:RETRY_BASE_MS });
 }
 console.log(`Hybrid Roast Room: ${mode} council${resumeId ? " (resume)" : ""}`);
-console.log(`Chair: ${CHAIR_PROVIDER === "gemini" ? "Gemini (test/fallback mode)" : "GitHub Copilot Student (Gemini fallback)"} | Seats: Gemini | Seat concurrency:`, CONCURRENCY);
+console.log(`Chair: ${CHAIR_PROVIDER === "gemini" ? "Gemini (test/fallback mode)" : "GitHub Copilot Student (Gemini fallback)"} | Seats: Gemini | Seat concurrency: ${CONCURRENCY} | Seat retries: ${SEAT_RETRIES}`);
 console.log("Session:", dir);
 console.log("Watch: http://localhost:4730");
 
 console.log("Round 1...");
 await runRound(st,1,round1Task);
-let crux;
 const cruxPath = path.join(dir,"cruxes.json");
-if (fs.existsSync(cruxPath)) {
-  crux = JSON.parse(fs.readFileSync(cruxPath,"utf8"));
+let crux = readJsonFile(cruxPath);
+if (crux) {
   console.log("Cruxes: reusing saved Chair analysis.");
 } else {
   crux = await chairJson("cruxes", `You are the neutral Chair. Do not argue a side.\n\n${briefBlock(st)}\n\nROUND 1 CARDS\n${cardsBlock(st,1)}\n\nIdentify 1-3 underlying cruxes explaining the split. For each side use seat keys only. If every seat chose the same top option and scores are within 1, set unanimous=true and force the strongest unargued alternative into a crux. pressure contains only minority/unanimity-challenge seats and the argument they must answer.`);
@@ -386,6 +469,7 @@ const verdict=await chairJson("verdict",`You are the neutral Chair. Write the fi
 verdict.recommended=stats.recommended;
 writeText(path.join(dir,"verdict.md"),verdictMarkdown(st,verdict,stats,round));
 writeJson(path.join(dir,"verdict.json"),verdict);
+telemetry.complete({ chair_providers_used: [...chairProvidersUsed] });
 console.log("DONE");
 console.log("Verdict:", verdict.label, "|", verdict.call);
 console.log("Scores:", st.options.map((o)=>`${o.id}=${stats.scores[o.id]?.score}`).join(" "));

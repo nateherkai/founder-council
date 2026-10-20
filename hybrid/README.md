@@ -30,7 +30,9 @@ Resume an interrupted hybrid session without rerunning completed seats or Chair 
 
 In Hybrid mode, interrupted Hybrid sessions also show a **Resume** button in **Past sessions**, so the same recovery path can be started from the room UI. While a Hybrid council is running, the room shows its saved progress (for example `Openings 2/4`) and a **Stop council** control. Stop terminates the Hybrid process tree but keeps completed checkpoints, so the same session can be resumed later without rerunning saved seats. Unexpected runner failures are saved to `hybrid-error.json`, surfaced live in the room, and remain visible in session history until the next Resume attempt.
 
-The runner loads `.env` itself before it resolves providers, models, and concurrency. Explicit process environment variables still take precedence. Each completed seat card is checkpointed to `round-N.json`, and older interrupted sessions that only have `round-N.md` are reconstructed automatically when possible.
+Provider timing and reliability metadata are saved to `hybrid-meta.json`; prompts and model-output text are not copied into telemetry. Active and past sessions show runtime, provider-call, retry, and Chair-fallback counts in the room.
+
+The runner loads `.env` itself before it resolves providers, models, concurrency, and retry policy. Explicit process environment variables still take precedence. Each completed seat card is checkpointed to `round-N.json`, and older interrupted sessions that only have `round-N.md` are reconstructed automatically when possible. `GEMINI_SEAT_RETRIES` defaults to `1` (range `0..2`) and retries only transient network/rate-limit failures. `GEMINI_RETRY_BASE_MS` defaults to `1500` ms (range `250..30000`) and uses capped exponential backoff.
 
 ## Architecture and safety
 
