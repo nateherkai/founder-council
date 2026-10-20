@@ -31,7 +31,9 @@ try {
   if (!Array.isArray(data.seats) || data.seats.length !== 7) throw new Error(`expected 7 seats, got ${data.seats?.length}`);
   const resume = await fetch(`${base}/api/sessions/not-a-session/resume`, { method: "POST" });
   if (resume.status !== 403) throw new Error(`viewer resume route should return 403, got ${resume.status}`);
-  console.log(`CI smoke OK: runner=${data.runner}, seats=${data.seats.length}, resume403=yes`);
+  const stop = await fetch(`${base}/api/sessions/not-a-session/stop`, { method: "POST" });
+  if (stop.status !== 403) throw new Error(`viewer stop route should return 403, got ${stop.status}`);
+  console.log(`CI smoke OK: runner=${data.runner}, seats=${data.seats.length}, resume403=yes, stop403=yes`);
 } finally {
   child.kill();
 }

@@ -21,3 +21,5 @@ jobs:
         run: npm run ci:smoke
       - name: Hybrid resume smoke test
         run: npm run resume:smoke
+      - name: Hybrid server progress/stop smoke test
+        run: npm run hybrid:server:smoke

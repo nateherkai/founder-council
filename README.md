@@ -82,7 +82,7 @@ Run `npm start`, open http://localhost:4730, and click **Past sessions**. Three 
 
 This checkout also includes `hybrid/`, which lets you type a decision directly into the room without an Anthropic API key. Set `COUNCIL_RUNNER=hybrid`: the seven advisor seats run through the authenticated Gemini CLI, while setup, cruxes, and the final Chair verdict run through the authenticated GitHub Copilot CLI. If Copilot is unavailable, the Chair can fall back to Gemini. The runner writes the same `sessions/` files, so the existing live room, replay, and PDF flow stay unchanged.
 
-On this 8 GB machine the tested settings are `GEMINI_MODEL=gemini-2.5-flash` and `GEMINI_CONCURRENCY=1`. The hybrid runner loads `.env` automatically and checkpoints each completed round card so interrupted councils can resume with `npm run hybrid:resume -- SESSION_ID` instead of rerunning completed work. In Hybrid mode, resumable sessions also get a **Resume** button in **Past sessions**. See `hybrid/README.md` for the terminal commands and architecture.
+On this 8 GB machine the tested settings are `GEMINI_MODEL=gemini-2.5-flash` and `GEMINI_CONCURRENCY=1`. The hybrid runner loads `.env` automatically and checkpoints each completed round card so interrupted councils can resume with `npm run hybrid:resume -- SESSION_ID` instead of rerunning completed work. In Hybrid mode, resumable sessions also get a **Resume** button in **Past sessions**; active Hybrid sessions show saved progress and a **Stop council** control that preserves checkpoints for later Resume. See `hybrid/README.md` for the terminal commands and architecture.
 
 ## Optional: Anthropic API runner
 

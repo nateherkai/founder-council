@@ -66,11 +66,62 @@ function isHybridResumable(id) {
   catch { return false; }
 }
 
+function hybridProgress(id) {
+  if (!/^[a-zA-Z0-9._-]+$/.test(id || "")) return null;
+  const dir = path.join(SESSIONS_DIR, id);
+  const councilPath = path.join(dir, "council.json");
+  if (!fs.existsSync(councilPath)) return null;
+  let council;
+  try { council = JSON.parse(fs.readFileSync(councilPath, "utf8")); } catch { return null; }
+  if (council.runner !== "hybrid") return null;
+  const seats = (council.seats || []).filter(Boolean);
+  const total = seats.length || (council.mode === "quick" ? 4 : 7);
+  const countRound = (round) => {
+    const jp = path.join(dir, `round-${round}.json`);
+    if (fs.existsSync(jp)) {
+      try {
+        const saved = JSON.parse(fs.readFileSync(jp, "utf8"));
+        return seats.filter((k) => saved.cards?.[k]).length;
+      } catch {}
+    }
+    const mp = path.join(dir, `round-${round}.md`);
+    if (fs.existsSync(mp)) {
+      try {
+        const cards = watch.splitCards(fs.readFileSync(mp, "utf8"));
+        return new Set(cards.map((c) => c.key).filter((k) => seats.includes(k))).size;
+      } catch {}
+    }
+    return 0;
+  };
+  if (fs.existsSync(path.join(dir, "verdict.json"))) return { phase: "verdict", label: "Complete", done: total, total };
+  const r3 = countRound(3), r2 = countRound(2), r1 = countRound(1);
+  if (fs.existsSync(path.join(dir, "draft.json")) || r3) return { phase: "round3", label: `Vote ${r3}/${total}`, done: r3, total };
+  if (fs.existsSync(path.join(dir, "cruxes.json")) || r2) return { phase: "round2", label: `Debate ${r2}/${total}`, done: r2, total };
+  if (r1) return { phase: "round1", label: `Openings ${r1}/${total}`, done: r1, total };
+  return { phase: "setup", label: "Setting up", done: 0, total };
+}
+
+async function stopHybrid(id) {
+  if (!hybridProcess || hybridProcess.exitCode != null || hybridRunning !== id) throw new Error("That Hybrid council is not currently running.");
+  const child = hybridProcess;
+  watch.stop(id);
+  if (process.platform === "win32") {
+    await new Promise((resolve) => {
+      const killer = spawn("taskkill", ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" });
+      killer.on("error", () => resolve());
+      killer.on("close", () => resolve());
+    });
+  } else {
+    try { process.kill(-child.pid, "SIGTERM"); } catch { try { child.kill("SIGTERM"); } catch {} }
+  }
+  if (hybridProcess === child) { hybridProcess = null; hybridRunning = null; }
+}
+
 async function startHybrid(prompt, mode) {
   if (hybridProcess && hybridProcess.exitCode == null) throw new Error("A Hybrid council is already running.");
   const id = `${new Date().toISOString().slice(0, 10)}-hybrid-${Date.now().toString(36)}`;
   const args = [path.join(REPO_ROOT, "hybrid", "runner.mjs"), mode === "quick" ? "--quick" : "--full", "--session-id", id, prompt];
-  const child = spawn(process.execPath, args, { cwd: REPO_ROOT, windowsHide: true, env: hybridChildEnv() });
+  const child = spawn(process.execPath, args, { cwd: REPO_ROOT, windowsHide: true, env: hybridChildEnv(), detached: process.platform !== "win32" });
   wireHybridChild(child, id);
   await waitForHybridSetup(id, child);
   return id;
@@ -80,7 +131,7 @@ async function resumeHybrid(id) {
   if (hybridProcess && hybridProcess.exitCode == null) throw new Error("A Hybrid council is already running.");
   if (!isHybridResumable(id)) throw new Error("This session cannot be resumed.");
   const args = [path.join(REPO_ROOT, "hybrid", "runner.mjs"), "--resume", id];
-  const child = spawn(process.execPath, args, { cwd: REPO_ROOT, windowsHide: true, env: hybridChildEnv() });
+  const child = spawn(process.execPath, args, { cwd: REPO_ROOT, windowsHide: true, env: hybridChildEnv(), detached: process.platform !== "win32" });
   wireHybridChild(child, id);
   watch.resume(id);
   await new Promise((resolve, reject) => setTimeout(() => child.exitCode && child.exitCode !== 0 ? reject(new Error(`Hybrid resume exited early (code ${child.exitCode}).`)) : resolve(), 200));
@@ -132,7 +183,12 @@ const server = http.createServer(async (req, res) => {
     if (p === "/api/sessions") {
       const active = RUNNER === "hybrid" ? hybridRunning : (running && getSession(running)?.status === "running" ? running : null);
       const all = [...listSaved(), ...watch.listLive()]
-        .map((s) => ({ ...s, resumable: RUNNER === "hybrid" && s.id !== active && isHybridResumable(s.id) }))
+        .map((s) => ({
+          ...s,
+          resumable: RUNNER === "hybrid" && s.id !== active && isHybridResumable(s.id),
+          stoppable: RUNNER === "hybrid" && s.id === active,
+          progress: RUNNER === "hybrid" ? hybridProgress(s.id) : null,
+        }))
         .sort((a, b) => (a.id < b.id ? 1 : -1));
       return send(res, 200, { sessions: all, running: active, live: watch.runningId() });
     }
@@ -143,6 +199,14 @@ const server = http.createServer(async (req, res) => {
       if (!isHybridResumable(id)) return send(res, 409, { error: "This session is complete, invalid, or not a Hybrid session." });
       const resumed = await resumeHybrid(id);
       return send(res, 200, { id: resumed });
+    }
+    const stopMatch = p.match(/^\/api\/sessions\/([^/]+)\/stop$/);
+    if (stopMatch && req.method === "POST") {
+      if (RUNNER !== "hybrid") return send(res, 403, { error: "Stop is only available in Hybrid mode." });
+      const id = decodeURIComponent(stopMatch[1]);
+      if (hybridRunning !== id || !hybridProcess || hybridProcess.exitCode != null) return send(res, 409, { error: "That Hybrid council is not currently running." });
+      await stopHybrid(id);
+      return send(res, 200, { id, status: "stopped", resumable: isHybridResumable(id), progress: hybridProgress(id) });
     }
     if (p.startsWith("/api/sessions/")) {
       const id = decodeURIComponent(p.split("/").pop());

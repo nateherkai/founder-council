@@ -11,7 +11,8 @@
     "hybrid:quick": "node hybrid/runner.mjs --quick",
     "hybrid:resume": "node hybrid/runner.mjs --resume",
     "resume:smoke": "node scripts/hybrid-resume-smoke.mjs",
-    "check": "node --check app/server.mjs && node --check app/public/app.js && node --check hybrid/runner.mjs && node --check scripts/ci-smoke.mjs && node --check scripts/hybrid-resume-smoke.mjs",
+    "hybrid:server:smoke": "node scripts/hybrid-server-smoke.mjs",
+    "check": "node --check app/server.mjs && node --check app/public/app.js && node --check hybrid/runner.mjs && node --check scripts/ci-smoke.mjs && node --check scripts/hybrid-resume-smoke.mjs && node --check scripts/hybrid-server-smoke.mjs",
     "ci:smoke": "node scripts/ci-smoke.mjs"
   },
   "engines": {
