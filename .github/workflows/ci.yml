@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Syntax checks
+        run: npm run check
+      - name: Viewer smoke test
+        run: npm run ci:smoke
+      - name: Hybrid resume smoke test
+        run: npm run resume:smoke
+      - name: Hybrid crash/resume smoke test
+        run: npm run crash:resume:smoke
+      - name: Hybrid telemetry smoke test
+        run: npm run telemetry:smoke
+      - name: Hybrid retry policy smoke test
+        run: npm run retry:smoke
+      - name: Hybrid deterministic fault-injection matrix
+        run: npm run fault:smoke
+      - name: Hybrid telemetry reporting smoke test
+        run: npm run telemetry:report:smoke
+      - name: Hybrid server progress/stop smoke test
+        run: npm run hybrid:server:smoke
+
+  launcher-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: PowerShell launcher smoke test
+        shell: powershell
+        run: .\scripts\launcher-smoke.ps1
+      - name: Local backup smoke test
+        shell: powershell
+        run: |
+          $backup = & .\scripts\backup-roast-room.ps1 -Destination "$env:RUNNER_TEMP\roast-room-backups"
+          if (-not (Test-Path (Join-Path $backup 'repo.bundle'))) { throw 'repo.bundle missing' }
+          if (-not (Test-Path (Join-Path $backup 'sessions.zip'))) { throw 'sessions.zip missing' }
+          if (Test-Path (Join-Path $backup '.env')) { throw '.env must be excluded by default' }
+          Write-Host "Backup smoke OK: $backup"
+      - name: One-click updater regression smoke test
+        shell: powershell
+        run: .\scripts\updater-helper-smoke.ps1

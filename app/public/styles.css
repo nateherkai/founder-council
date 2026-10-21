@@ -269,6 +269,10 @@ button { font: inherit; cursor: pointer; }
   background: rgba(7, 18, 28, .82); border: 1px solid var(--hairline); border-radius: 999px; padding: 4px 4px 4px 12px; backdrop-filter: blur(6px);
 }
 .playbar .queue { font-size: 11.5px; color: var(--ink-mute); white-space: nowrap; }
+.playbar .run-status { font-size: 11.5px; color: var(--accent); white-space: nowrap; font-weight: 600; }
+.playbar .stop { background: transparent; color: #ff9a8f; border: 1px solid rgba(255, 144, 128, .45); font-size: 12px; font-weight: 700; padding: 5px 9px; border-radius: 999px; }
+.playbar .stop:hover { color: #ffd3cc; border-color: rgba(255, 170, 155, .8); }
+.playbar .stop:disabled { opacity: .55; cursor: progress; }
 .speed { display: flex; gap: 2px; }
 .speed button, .skip { background: transparent; border: 0; color: var(--ink-mute); font-size: 12px; font-weight: 600; padding: 5px 9px; border-radius: 999px; }
 .speed button[aria-pressed="true"] { background: #ffffff; color: #07121c; }
@@ -378,7 +382,8 @@ button { font: inherit; cursor: pointer; }
   .center { position: relative !important; left: auto !important; top: auto !important; width: auto !important; height: auto !important; padding: 16px; border-top: 1px solid var(--hairline); background: var(--canvas); border-radius: 0 0 20px 20px; }
   .composer-row { justify-content: center; }
   .mode { flex-wrap: wrap; justify-content: center; }
-  .playbar { position: static; margin: 0 16px 14px; justify-content: space-between; align-self: stretch; }
+  .playbar { position: static; margin: 0 16px 14px; justify-content: space-between; align-self: stretch; flex-wrap: wrap; border-radius: 14px; }
+  .playbar .run-status { order: -1; flex: 1 1 100%; }
   .think { padding: 4px 6px; }
   .think i { width: 4px; height: 4px; }
   .v-grid, .boxes { grid-template-columns: 1fr; }
@@ -481,7 +486,11 @@ button { font: inherit; cursor: pointer; }
 .v-top .actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .history li { display: flex; gap: 8px; align-items: stretch; }
 .history li > button:first-child { flex: 1; }
-.history .pdf { flex: none; width: auto; padding: 0 14px; font-size: 12px; font-weight: 600; color: var(--ink-soft); text-align: center; }
+.history .pdf, .history .resume, .history .stop { flex: none; width: auto; padding: 0 14px; font-size: 12px; font-weight: 600; text-align: center; }
+.history .pdf { color: var(--ink-soft); }
+.history .resume { color: var(--ink); border-color: var(--accent); }
+.history .stop { color: #ff9a8f; border-color: rgba(255, 144, 128, .45); }
+.history .resume:disabled, .history .stop:disabled { opacity: .6; cursor: progress; }
 .top-actions .ghost { white-space: nowrap; }
 @media (max-width: 820px) {
   .top-actions { margin-left: auto; }

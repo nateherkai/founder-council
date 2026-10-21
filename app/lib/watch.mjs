@@ -210,6 +210,28 @@ export function getLive(id) {
   return skillFolders().includes(id) ? load(id) : null;
 }
 
+export function resume(id) {
+  if (!skillFolders().includes(id)) return null;
+  const x = load(id);
+  if (x.status !== "done") {
+    x.status = "running";
+    sync(x);
+  }
+  return x;
+}
+
+export function stop(id) {
+  const x = live.get(id);
+  if (x?.status === "running") finish(x, "stopped");
+}
+
+export function fail(id, message) {
+  const x = live.get(id) || (skillFolders().includes(id) ? load(id) : null);
+  if (!x || x.status === "done") return;
+  emit(x, "error", { error: String(message || "Hybrid runner failed").slice(-3000) });
+  finish(x, "stopped");
+}
+
 /** The council running right now in Claude Code, if any (newest first). */
 export function runningId() {
   const r = [...live.values()].filter((x) => x.status === "running" && x.events.length).sort((a, b) => (a.id < b.id ? 1 : -1));

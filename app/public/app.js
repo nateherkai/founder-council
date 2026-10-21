@@ -90,10 +90,34 @@ async function boot() {
 const seenLive = new Set();
 async function watchForLive() {
   const ss = await fetch("/api/sessions").then((x) => x.json()).catch(() => null);
-  const id = ss?.live || ss?.running;
+  if (!ss) return;
+  updateRunControls(ss);
+  const id = ss.live || ss.running;
   if (!id || seenLive.has(id) || id === state.session) return;
   seenLive.add(id);
   attach(id);
+}
+
+function updateRunControls(ss) {
+  const current = state.session && ss.sessions?.find((s) => s.id === state.session);
+  const status = $("#runStatus");
+  const stop = $("#stopBtn");
+  if (!current || state.replaying || state.verdict) {
+    status.textContent = "";
+    stop.hidden = true;
+    return;
+  }
+  const bits = [];
+  if (current.progress?.label) bits.push(current.progress.label);
+  if (current.metrics) {
+    const m = current.metrics;
+    bits.push(`${clock(m.duration_ms)} · ${m.provider_calls} calls${m.retries ? ` · ${m.retries} retries` : ""}${m.fallbacks ? ` · ${m.fallbacks} fallback` : ""}`);
+  }
+  if (current.failure) bits.push("failed · safe to resume");
+  else if (current.status === "stopped") bits.push("stopped · safe to resume");
+  else if (current.stoppable) bits.push("running");
+  status.textContent = bits.join(" · ");
+  stop.hidden = !current.stoppable;
 }
 
 // AIS arrival: a heading types in a character at a time, blur to sharp
@@ -215,6 +239,7 @@ function bindUI() {
     $$(".speed button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
   }));
   $("#skipBtn").addEventListener("click", () => player.skip());
+  $("#stopBtn").addEventListener("click", () => stopSession(state.session, $("#stopBtn")));
 }
 
 // ------------------------------------------------------------- the player
@@ -257,12 +282,16 @@ function reset() {
   hideWait();
   $("#stage").classList.remove("live");
   $("#topic").hidden = true;
-  $("#composer").hidden = state.runner !== "api";
-  $("#waiting").hidden = state.runner === "api";
+  $("#composer").hidden = state.runner === "viewer";
+  $("#waiting").hidden = state.runner !== "viewer";
   $("#caption").hidden = true;
   $("#cruxes").hidden = true;
   $("#plate").hidden = true;
   $("#playbar").hidden = true;
+  $("#runStatus").textContent = "";
+  $("#stopBtn").hidden = true;
+  $("#stopBtn").disabled = false;
+  $("#stopBtn").textContent = "Stop council";
   $("#newBtn").hidden = true;
   $("#verdictSheet").hidden = true;
   $("#panelHead").textContent = "Getting started";
@@ -703,10 +732,66 @@ function onVerdict(ev) {
 async function openHistory() {
   const { sessions } = await fetch("/api/sessions").then((x) => x.json());
   $("#historyList").innerHTML = sessions.length
-    ? sessions.map((s) => `<li><button data-id="${esc(s.id)}"><b>${esc(s.title)}</b><small>${esc(s.id.slice(0, 10))} · ${esc(s.mode)} · ${esc(s.status)}</small></button>${s.status === "done" ? `<button class="pdf" type="button" data-pdf="${esc(s.id)}" title="Download the verdict as a PDF">PDF</button>` : ""}</li>`).join("")
+    ? sessions.map((s) => {
+        const progress = s.progress?.label ? ` · ${esc(s.progress.label)}` : "";
+        const failure = s.failure?.message ? " · failed" : "";
+        const failureTitle = s.failure?.message ? ` title="${esc(shorten(s.failure.message, 240))}"` : "";
+        const metrics = s.metrics
+          ? ` · ${clock(s.metrics.duration_ms)} · ${s.metrics.provider_calls} calls${s.metrics.retries ? ` · ${s.metrics.retries} retries` : ""}${s.metrics.fallbacks ? ` · ${s.metrics.fallbacks} fallback` : ""}${s.metrics.failed_calls ? ` · ${s.metrics.failed_calls} provider errors` : ""}`
+          : "";
+        return `<li><button data-id="${esc(s.id)}"${failureTitle}><b>${esc(s.title)}</b><small>${esc(s.id.slice(0, 10))} · ${esc(s.mode)} · ${esc(s.status)}${progress}${failure}${metrics}</small></button>${s.stoppable ? `<button class="stop" type="button" data-stop="${esc(s.id)}" title="Stop this Hybrid council and keep its checkpoints">Stop</button>` : ""}${s.resumable ? `<button class="resume" type="button" data-resume="${esc(s.id)}" title="Continue this interrupted Hybrid council">Resume</button>` : ""}${s.status === "done" ? `<button class="pdf" type="button" data-pdf="${esc(s.id)}" title="Download the verdict as a PDF">PDF</button>` : ""}</li>`;
+      }).join("")
     : '<li class="muted">No sessions yet. Convene the council once and it shows up here.</li>';
   $$("#historyList button[data-id]").forEach((b) => b.addEventListener("click", () => { $("#historyDialog").close(); replay(b.dataset.id); }));
+  $$("#historyList button[data-resume]").forEach((b) => b.addEventListener("click", () => resumeSession(b)));
+  $$("#historyList button[data-stop]").forEach((b) => b.addEventListener("click", () => stopSession(b.dataset.stop, b, true)));
   $("#historyDialog").showModal();
+}
+
+async function resumeSession(btn) {
+  const id = btn.dataset.resume;
+  btn.disabled = true;
+  const old = btn.textContent;
+  btn.textContent = "Resuming...";
+  try {
+    const r = await fetch(`/api/sessions/${encodeURIComponent(id)}/resume`, { method: "POST" });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || "Could not resume this council.");
+    $("#historyDialog").close();
+    attach(j.id);
+  } catch (e) {
+    toast(e.message || String(e));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = old;
+  }
+}
+
+async function stopSession(id, btn, fromHistory = false) {
+  if (!id) return;
+  btn.disabled = true;
+  const old = btn.textContent;
+  btn.textContent = "Stopping...";
+  try {
+    const r = await fetch(`/api/sessions/${encodeURIComponent(id)}/stop`, { method: "POST" });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || "Could not stop this council.");
+    if (id === state.session) {
+      state.es?.close();
+      state.wait = null;
+      hideWait();
+      $("#runStatus").textContent = `${j.progress?.label || "Checkpoint saved"} · stopped · safe to resume`;
+      $("#stopBtn").hidden = true;
+      chairSays("Council stopped. Your completed work is saved and can be resumed from Past sessions.", { tag: "Checkpoint saved" });
+    }
+    toast("Council stopped. Checkpoints kept for Resume.");
+    if (fromHistory) { $("#historyDialog").close(); await openHistory(); }
+  } catch (e) {
+    toast(e.message || String(e));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = old;
+  }
 }
 
 async function replay(id) {

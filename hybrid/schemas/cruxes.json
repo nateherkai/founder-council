@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["cruxes", "unanimous", "note", "pressure"],
+  "properties": {
+    "cruxes": {"type": "array", "minItems": 1, "maxItems": 3, "items": {"type": "object", "additionalProperties": false, "required": ["question", "sides"], "properties": {"question": {"type": "string"}, "sides": {"type": "array", "minItems": 2, "items": {"type": "object", "additionalProperties": false, "required": ["position", "seats"], "properties": {"position": {"type": "string"}, "seats": {"type": "array", "items": {"enum": ["bezos", "graham", "hormozi", "garyvee", "martell", "wickman", "buffett"]}}}}}}},
+    "unanimous": {"type": "boolean"},
+    "note": {"type": "string"},
+    "pressure": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["seat", "ask"], "properties": {"seat": {"enum": ["bezos", "graham", "hormozi", "garyvee", "martell", "wickman", "buffett"]}, "ask": {"type": "string"}}}}
+  }
+}
