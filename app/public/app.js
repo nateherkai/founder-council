@@ -14,7 +14,7 @@ const SAMPLES = [
 const EXAMPLE = "I run a coaching business at $30k a month with 15 clients at $2,000 each. Should I raise to $3,500 for everyone, raise for new clients only, or keep $2,000? Close rate is about 50% and I have $40k in the bank. Success is $45k a month by March. I'm leaning toward raising for everyone because I'm underpaid.";
 
 // The how-to, shown in the side panel while the room is empty and in "How it works".
-const GUIDE = `
+const VIEWER_GUIDE = `
   <div class="guide">
     <div class="guide-sec">
       <h4>How to use the Roast Room</h4>
@@ -55,6 +55,43 @@ const GUIDE = `
       </ul>
     </div>
   </div>`;
+
+function guide() {
+  if (state.runner !== "api") return VIEWER_GUIDE;
+  const providerName = state.provider === "openai" ? "OpenAI" : "Anthropic";
+  return `
+  <div class="guide">
+    <div class="guide-sec">
+      <h4>How to use the Roast Room</h4>
+      <ol>
+        <li><span>Enter your decision in the box on the room page.</span></li>
+        <li><span>Choose a full or quick council, then select <b>Convene the council</b>.</span></li>
+        <li><span>The Chair and advisors will work through the decision using the ${providerName} API. Watch the council argue it out here.</span></li>
+        <li><span>When the verdict lands, download it as a PDF.</span></li>
+      </ol>
+    </div>
+    <div class="guide-sec">
+      <h4>What to put in your question</h4>
+      <ul>
+        <li><span><b>The decision</b> in one line.</span></li>
+        <li><span><b>Your options.</b> Two or three. "Keep doing what I do now" counts.</span></li>
+        <li><span><b>Your numbers.</b> Revenue, cash, and team size.</span></li>
+        <li><span><b>Your limits.</b> Deadline, hours, and budget.</span></li>
+        <li><span><b>What success looks like</b>, and by when.</span></li>
+        <li><span><b>Which way you're leaning</b>, and why. The council tests it.</span></li>
+      </ul>
+      <p class="note" style="margin-top:8px">Left something out? The Chair asks before the council starts.</p>
+    </div>
+    <div class="guide-sec">
+      <h4>Good to know</h4>
+      <ul>
+        <li><span><b>Full council:</b> 7 advisors and 3 rounds.</span></li>
+        <li><span><b>Quick:</b> 4 advisors and 2 rounds.</span></li>
+        <li><span><b>Every council is saved.</b> Open Past sessions to replay one or download its PDF.</span></li>
+      </ul>
+    </div>
+  </div>`;
+}
 
 const SHAPES = ["base", "open", "mid", "blink"];
 // A seat's cartoon frames live in /portraits/<key>-<shape>.webp (or .png, .jpg). A seat added with /newroaster
@@ -101,7 +138,18 @@ const state = {
 async function boot() {
   const r = await refreshSeats();
   state.runner = r.runner;
-  if (r.runner === "api" && !r.hasKey) toast("No ANTHROPIC_API_KEY found in .env. Add it and restart the server.");
+  state.provider = r.provider;
+  const viewerWorkflow = r.runner !== "api";
+  const providerName = r.provider === "openai" ? "OpenAI" : "Anthropic";
+  $("#waiting p").textContent = viewerWorkflow
+    ? "In Claude Code, type the line below with your decision. The council shows up here and argues it out live."
+    : `Enter your decision below. The council runs here using the ${providerName} API.`;
+  $("#waiting code").textContent = viewerWorkflow ? "/roast-room should I ..." : "Your decision, options, numbers, and what success looks like";
+  $("#wcNudge").textContent = viewerWorkflow
+    ? "Nothing new for a while? Check Claude Code. It may be waiting for you to answer or approve something."
+    : `Nothing new for a while? Check the ${providerName} API connection and usage limits.`;
+  const keyName = r.provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY";
+  if (r.runner === "api" && !r.hasKey) toast(`No ${keyName} found in .env. Add it and restart the server.`);
   renderSeats(state.board);
   renderSamples();
   bindUI();
@@ -129,7 +177,7 @@ async function refreshSeats() {
   return r;
 }
 
-// a council started in Claude Code shows up here on its own
+// a council started in the viewer workflow shows up here on its own
 const seenLive = new Set();
 async function watchForLive() {
   const ss = await fetch("/api/sessions").then((x) => x.json()).catch(() => null);
@@ -258,7 +306,11 @@ function bindUI() {
   $("#guideBtn").addEventListener("click", openGuide);
   document.addEventListener("click", async (e) => {
     if (e.target.closest("[data-copy-example]")) {
-      try { await navigator.clipboard.writeText("/roast-room " + EXAMPLE); toast("Copied. Paste it into Claude Code."); }
+      try {
+        const viewerWorkflow = state.runner !== "api";
+        await navigator.clipboard.writeText((viewerWorkflow ? "/roast-room " : "") + EXAMPLE);
+        toast(viewerWorkflow ? "Copied. Paste it into Claude Code." : "Copied. Paste it into the decision box.");
+      }
       catch { toast("Copy didn't work here. Select the text and copy it."); }
     }
     if (e.target.closest("[data-pdf]")) savePdf(e.target.closest("[data-pdf]"));
@@ -334,7 +386,7 @@ function reset() {
   $("#newBtn").hidden = true;
   $("#verdictSheet").hidden = true;
   $("#panelHead").textContent = "Getting started";
-  $("#feed").innerHTML = GUIDE;
+  $("#feed").innerHTML = guide();
   $$(".vote").forEach((b) => b.remove());
   renderSeats(state.board);
   $$(".seat").forEach((el) => { el.classList.remove("absent", "speaking", "thinking", "addressed"); $(".bust", el).dataset.shape = "base"; });
@@ -793,17 +845,22 @@ async function replay(id) {
   }
 }
 
-// ------------------------------------------------------------- waiting on Claude Code
+// ------------------------------------------------------------- council progress while the room waits
 // A live council goes quiet for minutes while the seats write in parallel. Instead of a
 // frozen table, say what is happening, how long it has been, and what each seat is weighing.
-const SAME_TIME = "The advisors all write at the same time in Claude Code. Their lines play here as soon as the round is in.";
+function sameTimeCopy() {
+  return state.runner === "api"
+    ? `The advisors are working in parallel through the ${state.provider === "openai" ? "OpenAI" : "Anthropic"} API. Their lines play here as soon as the round is in.`
+    : "The advisors all write at the same time in Claude Code. Their lines play here as soon as the round is in.";
+}
 function waitCopy(phase) {
   const n = state.setup?.mode === "quick" ? 2 : 3;
+  const sameTime = sameTimeCopy();
   return {
     setup: ["Setting the table", "The Chair is seating the council.", ""],
-    round1: ["Round 1 of " + n, "The advisors are writing their opening positions.", SAME_TIME],
-    round2: ["Round 2 of " + n, "The advisors are reading each other's openings and firing back.", SAME_TIME],
-    round3: ["Round 3 of " + n, "The advisors are voting on the Chair's proposal.", SAME_TIME],
+    round1: ["Round 1 of " + n, "The advisors are writing their opening positions.", sameTime],
+    round2: ["Round 2 of " + n, "The advisors are reading each other's openings and firing back.", sameTime],
+    round3: ["Round 3 of " + n, "The advisors are voting on the Chair's proposal.", sameTime],
     cruxes: ["Between rounds", "The Chair is reading the openings and finding where they disagree.", "The fight shows up here next, then the debate starts."],
     draft: ["Between rounds", "The Chair is turning the debate into a proposal for the vote.", "Next, every advisor votes on it."],
     skip3: ["Last step", "The Chair is scoring the room and writing the verdict.", "When it lands, you can download it as a PDF."],
@@ -873,7 +930,7 @@ function tickWait() {
 }
 
 function openGuide() {
-  $("#guideBody").innerHTML = GUIDE;
+  $("#guideBody").innerHTML = guide();
   const d = $("#guideDialog");
   if (!d.open) d.showModal();
 }

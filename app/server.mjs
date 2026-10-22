@@ -1,10 +1,10 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
-import { APP_ROOT, env } from "./lib/env.mjs";
+import { APP_ROOT, env, llmProvider, validateLlmConfig } from "./lib/env.mjs";
 import { loadRoster, BOARD } from "./lib/seats.mjs";
 import { startCouncil, getSession, subscribe, listSaved, loadSaved, MODELS } from "./lib/council.mjs";
-import { usage } from "./lib/anthropic.mjs";
+import { usage } from "./lib/llm.mjs";
 import * as watch from "./lib/watch.mjs";
 
 const PORT = Number(process.env.PORT) || 4730;
@@ -14,8 +14,9 @@ const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; ch
 let running = null; // one council at a time (API runner)
 
 // "viewer" (default): the room plays councils that /roast-room runs in Claude Code.
-// "api": the room can also run councils itself on ANTHROPIC_API_KEY (COUNCIL_RUNNER=api in .env).
+// "api": the room can run councils itself using the LLM_PROVIDER selected in .env.
 const RUNNER = (process.env.COUNCIL_RUNNER || env("COUNCIL_RUNNER") || "viewer").toLowerCase() === "api" ? "api" : "viewer";
+const PROVIDER = llmProvider();
 watch.startWatching();
 
 function send(res, code, body, type = "application/json") {
@@ -37,11 +38,14 @@ const server = http.createServer(async (req, res) => {
       // portraits: which of the four mouth shapes exist for each seat (a seat with none gets a drawn bust)
       const frame = (key, sh) => ["webp", "png", "jpg"].map((x) => `${key}-${sh}.${x}`).find((f) => fs.existsSync(path.join(PUBLIC, "portraits", f)));
       const seats = loadRoster().map((s) => ({ ...s, portraits: Object.fromEntries(["base", "open", "mid", "blink"].map((sh) => [sh, frame(s.key, sh)]).filter(([, f]) => f).map(([sh, f]) => [sh, `/portraits/${f}`])) }));
-      return send(res, 200, { seats, board: BOARD, models: MODELS, runner: RUNNER, hasKey: Boolean(env("ANTHROPIC_API_KEY")) });
+      const keyName = PROVIDER === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY";
+      return send(res, 200, { seats, board: BOARD, models: MODELS, runner: RUNNER, provider: PROVIDER, hasKey: Boolean(env(keyName)) });
     }
     if (p === "/api/usage") return send(res, 200, usage);
     if (p === "/api/council" && req.method === "POST") {
       if (RUNNER !== "api") return send(res, 403, { error: "This room is a viewer. Run /roast-room in Claude Code, or set COUNCIL_RUNNER=api in .env." });
+      try { validateLlmConfig(PROVIDER); }
+      catch (e) { return send(res, 400, { error: e.message }); }
       if (running && getSession(running)?.status === "running") return send(res, 409, { error: "A council is already in session. Wait for its verdict." });
       const { prompt, mode } = await readJson(req);
       if (!prompt || prompt.trim().length < 10) return send(res, 400, { error: "Give the council a real decision (at least a sentence)." });

@@ -2,7 +2,7 @@
 
 ![The Roast Room](docs/room.jpg)
 
-Bring a hard business decision and a council of AI advisors argues it out, then hands you a scored verdict and a one-click PDF. Twelve advisors ship with it, each built from that person's public work: their letters, essays, talks, and videos. For each question, the Chair recommends who should sit on the council and you confirm. The council runs in Claude Code, and a small local web app shows them around a table talking it through. Want someone else at the table? Type `/newroaster` and a name, and Claude builds that advisor the same way.
+Bring a hard business decision and a council of AI advisors argues it out, then hands you a scored verdict and a one-click PDF. Nineteen advisors ship with it, each built from that person's public work: their letters, essays, talks, and videos. For each question, the Chair recommends who should sit on the council and you confirm. The council runs in Claude Code, and a small local web app shows them around a table talking it through. Want someone else at the table? Type `/newroaster` and a name, and Claude builds that advisor the same way.
 
 | Seat | Pillar | The question they own |
 |---|---|---|
@@ -14,7 +14,7 @@ Bring a hard business decision and a council of AI advisors argues it out, then 
 | Gino Wickman | Operations and scaling | Can the business run this without you holding it together? |
 | Warren Buffett | Money and capital | What does it do to cash, risk, and long-term value? |
 
-Those seven are the **default board**. Five more advisors are on call, and the Chair brings them in when your question is in their lane:
+Those seven are the **default board**. Twelve more advisors are on call, and the Chair brings them in when your question is in their lane:
 
 | Seat | Pillar | The question they own |
 |---|---|---|
@@ -23,17 +23,33 @@ Those seven are the **default board**. Five more advisors are on call, and the C
 | Leila Hormozi | Leadership and scaling teams | Can your team and your leadership carry this, and who has to change? |
 | Sara Blakely | Consumer product and brand from zero | Will customers love it enough to sell it for you, without outside money? |
 | Elon Musk | First principles and execution speed | What is the real constraint here, and can we cut steps and build it faster? |
+| Atul Gawande | Health systems and public health | How can we improve health and care without increasing harm or waste? |
+| Margaret MacMillan | History and institutions | What historical pattern or institutional context are we missing? |
+| Daron Acemoglu | Economics and political economy | How will this decision affect growth, work, incentives, and prosperity over time? |
+| Barbara Oakley | Education and learning | Will this help people learn, retain, and apply what it teaches? |
+| Anu Bradford | EU law and digital regulation | How will law and regulation change the costs, permissions, and competitive boundaries of this decision? |
+| Bruce Schneier | Technology security and privacy | Where can this technology fail, be misused, or expose people and systems? |
+| Richard H. Thaler | Behavioral economics and decision-making | What biases, incentives, or friction will shape what people actually do? |
+
+Source depth varies across the new seats; each brain's `_hot.md` records its source count, words, date range, and limits. Anu Bradford's, Bruce Schneier's, and Richard H. Thaler's seats are explicitly evidence-bounded, and unsupported topics are left unanswered.
+| Atul Gawande | Health systems and public health | How can we improve health and care without increasing harm or waste? |
+| Margaret MacMillan | History and institutions | What historical pattern or institutional context are we missing? |
+| Daron Acemoglu | Economics and political economy | How will this decision affect growth, work, incentives, and prosperity over time? |
+| Barbara Oakley | Education and learning | Will this help people learn, retain, and apply what it teaches? |
+| Anu Bradford | EU law and digital regulation | How will law and regulation change the costs, permissions, and competitive boundaries of this decision? |
 
 ## What you need
 
-- [Claude Code](https://claude.com/claude-code). Your Claude plan covers it; no API key needed.
-- [Node.js](https://nodejs.org) 20 or newer, for the room. There's nothing to install beyond that.
+- [Node.js](https://nodejs.org) 20 or newer and npm, for the room.
+- [Claude Code](https://claude.com/claude-code) only for the `/roast-room` workflow that runs councils through Claude Code. That workflow does not use the room's API provider setting.
+- An Anthropic or OpenAI API key only if you want the room to run councils itself (`COUNCIL_RUNNER=api`). API usage is billed by the selected provider.
 
 ## Setup
 
 ```bash
 git clone https://github.com/nateherkai/roast-room.git
 cd roast-room
+npm install
 ```
 
 Or open Claude Code anywhere and say: "Clone github.com/nateherkai/roast-room and start the room for me."
@@ -73,7 +89,7 @@ More ways to run it:
 - `/roast-room --quick ...` seats four advisors for two rounds. Use it for smaller, reversible calls. It uses far less of your plan.
 - `/roast-room --seats hormozi,buffett ...` seats only the advisors you name.
 - `/roast-room ask hormozi ...` gets one answer from one seat.
-- `/roast-room --all ...` seats every advisor you have (up to nine).
+- `/roast-room --all ...` seats every advisor when your roster has nine or fewer; with a larger roster, use `--seats` to name the council.
 - `/roast-room board` shows who sits at the table by default and lets you change it.
 
 The room is optional. The council runs the same in Claude Code without it.
@@ -107,7 +123,7 @@ How the board gets picked is a setting in `.claude/skills/roast-room/roster.json
 
 You don't need to edit the file by hand. Type `/roast-room board` and say what you want: "put Naval on my default board", "take Gary V off", or "stop asking me, just use my default board".
 
-Skip the question on any run: `--seats hormozi,naval,buffett` seats exactly those advisors, and `--all` seats everyone (up to nine). `--quick` recommends four.
+Skip the question on any run: `--seats hormozi,buffett,oakley` seats exactly those advisors, and `--all` seats everyone when you have nine or fewer. `--quick` recommends four.
 
 ## Add your own advisor
 
@@ -146,15 +162,60 @@ Run `npm start`, open http://localhost:4730, and click **Past sessions**. Three 
 
 ## How it works
 
-- **The council runs in Claude Code.** Each seat is a sub-agent (`.claude/agents/council-*.md`, listed in `roster.json`) that reads its own brain (`.claude/skills/roast-room/brains/<name>/`): frameworks, principles, positions, stories, and voice notes compiled from public sources, with every quote tied to a source. Claude Code acts as the Chair. It runs the rounds, keeps score, and writes the verdict (`.claude/skills/roast-room/SKILL.md`).
+- **The `/roast-room` workflow runs in Claude Code.** Each seat is a sub-agent (`.claude/agents/council-*.md`, listed in `roster.json`) that reads its own brain (`.claude/skills/roast-room/brains/<name>/`): frameworks, principles, positions, stories, and voice notes compiled from public sources, with every quote tied to a source. Claude Code acts as the Chair. It runs the rounds, keeps score, and writes the verdict (`.claude/skills/roast-room/SKILL.md`). The optional room API runner uses the provider selected by `LLM_PROVIDER` while sharing the council workflow and saved report format.
 - **Each seat scores every option**, weighted by how much that seat's pillar matters to your decision. The Chair caps the verdict when a seat flags ruin risk, and it forces a real argument when everyone agrees too fast.
-- **The room only watches.** As the Chair works, it writes each step to `sessions/`, and the app plays those files back. Between rounds it shows which round is running, how long it has been, and what each advisor is weighing. The room makes no AI calls of its own.
+- **The viewer room watches.** As Claude Code's Chair works, it writes each step to `sessions/`, and the app plays those files back. In API mode, the room runs the same rounds and emits the same progress events itself.
 - **Every council is saved** in `sessions/`. Past sessions replays any of them and downloads its PDF.
-- **Usage:** a full council is three sub-agent runs per seat (21 for seven), so it takes a real bite out of your plan's usage. Use `--quick` for small calls.
+- **Claude Code usage:** a full council is three sub-agent runs per seat (21 for seven), so it takes a real bite out of your plan's usage. Use `--quick` for small calls. API mode makes separate calls for the Chair and each advisor and is billed by the selected API provider.
 
-## Optional: let the room run councils itself
+## Choose the API provider
 
-If you'd rather type a decision straight into the room, copy `.env.example` to `.env`, add an `ANTHROPIC_API_KEY`, set `COUNCIL_RUNNER=api`, and restart `npm start`. That mode bills your Anthropic API account (about 25 calls per full council).
+The `.env` file controls only the room's API runner. The default `COUNCIL_RUNNER=viewer` plays councils created by `/roast-room` in Claude Code. Set `COUNCIL_RUNNER=api` to run the same multi-seat council directly in the room. The Chair, independent advisor calls, debate rounds, scoring, progress events, session format, and PDF report remain shared between API providers.
+
+Copy `.env.example` to `.env` if you do not already have a `.env` file. If `.env` already exists, edit it in place; do not replace it. Keep credentials in `.env`, which is ignored by git.
+
+```dotenv
+COUNCIL_RUNNER=api
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=your-anthropic-api-key
+ANTHROPIC_MODEL=claude-sonnet-5
+```
+
+Run with Claude:
+
+```bash
+npm start
+```
+
+To use OpenAI instead, set `LLM_PROVIDER=openai` and configure its API key and model. The Anthropic key is not needed for this selection:
+
+```dotenv
+COUNCIL_RUNNER=api
+LLM_PROVIDER=openai
+OPENAI_API_KEY=your-openai-api-key
+OPENAI_MODEL=gpt-5.1
+```
+
+Then restart `npm start` and submit a decision in the room. To switch back, change `LLM_PROVIDER` to `anthropic`. Provider names are case-insensitive; unsupported values fail with a setup error. No provider fallback occurs. Only the selected provider's API key is required. The default models shown above are starting points; model access varies by API account, so set `ANTHROPIC_MODEL` or `OPENAI_MODEL` to a model currently available to your account if needed. Anthropic's API model list is [here](https://docs.anthropic.com/en/docs/about-claude/models/overview), and OpenAI's is [here](https://platform.openai.com/docs/models).
+
+OpenAI API billing is separate from a ChatGPT subscription. A ChatGPT account or paid ChatGPT plan does not by itself provide API credits; see [OpenAI's billing explanation](https://help.openai.com/en/articles/9039756-managing-billing-settings-on-chatgpt-web-and-platform).
+
+Common setup and API errors:
+
+- **Missing key / authentication:** set the selected provider's key (`ANTHROPIC_API_KEY` or `OPENAI_API_KEY`) in `.env`, then restart the server. The other provider's key is not required.
+- **Model not found or unavailable:** check the spelling and use a model enabled for that API account; update the matching `*_MODEL` setting.
+- **Rate limit or quota / billing:** reduce concurrent usage and check API project limits, billing status, and available quota. The runner retries temporary rate limits a small, bounded number of times.
+- **Network or service interruption:** check connectivity and retry the run. An interrupted run is reported as an error; it is not silently sent to the other provider.
+
+OpenAI uses the Responses API with streaming text and strict JSON schema output for the Chair. Anthropic continues using its existing Messages API and structured JSON output. The Claude Code runner retains its agent tools and sub-agent workflow; those Anthropic-specific capabilities are not invoked by the OpenAI API runner. The API runner continues to call each advisor independently, with the same persona and reference material.
+
+Run automated tests without paid API calls:
+
+```bash
+npm test
+```
+
+`npm run smoke` remains an intentional live Anthropic API smoke test and can incur charges; it is not part of `npm test`.
 
 ## What's inside
 

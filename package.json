@@ -6,7 +6,11 @@
   "type": "module",
   "scripts": {
     "start": "node app/server.mjs",
-    "smoke": "node app/scripts/smoke.mjs"
+    "smoke": "node app/scripts/smoke.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "openai": "^7.41.0"
   },
   "engines": { "node": ">=20" }
 }

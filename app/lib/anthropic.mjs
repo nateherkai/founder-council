@@ -1,4 +1,5 @@
 import { env } from "./env.mjs";
+export { S } from "./schema.mjs";
 
 const URL = "https://api.anthropic.com/v1/messages";
 const RETRY = new Set([429, 500, 502, 503, 529]);
@@ -62,7 +63,6 @@ export async function stream({ model, system, messages, maxTokens = 2000, onText
   }
   throw new Error("Anthropic API kept refusing after retries");
 }
-
 /** One call with structured JSON output matching `schema`. */
 export async function json({ model, system, prompt, schema, maxTokens = 4000 }) {
   for (let attempt = 0; attempt < 6; attempt++) {
@@ -84,14 +84,3 @@ export async function json({ model, system, prompt, schema, maxTokens = 4000 }) 
   }
   throw new Error("Anthropic API kept refusing after retries");
 }
-
-// JSON schema helpers
-export const S = {
-  str: { type: "string" },
-  num: { type: "number" },
-  int: { type: "integer" },
-  bool: { type: "boolean" },
-  arr: (items) => ({ type: "array", items }),
-  obj: (props) => ({ type: "object", properties: props, required: Object.keys(props), additionalProperties: false }),
-  enum: (...v) => ({ type: "string", enum: v }),
-};

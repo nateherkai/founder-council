@@ -27,3 +27,33 @@ export function env(key) {
   }
   return cache[key] || "";
 }
+
+export function llmProvider() {
+  return normalizeLlmProvider(env("LLM_PROVIDER"));
+}
+
+export function normalizeLlmProvider(value = "") {
+  const provider = (value || "anthropic").trim().toLowerCase();
+  if (provider !== "anthropic" && provider !== "openai") {
+    throw new Error(`Unsupported LLM_PROVIDER "${provider}". Set LLM_PROVIDER=anthropic or LLM_PROVIDER=openai in .env.`);
+  }
+  return provider;
+}
+
+export function validateLlmConfig(provider = llmProvider(), readEnv = env) {
+  const keyName = provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY";
+  if (!readEnv(keyName).trim()) throw new Error(`Missing ${keyName}. Add it to .env to use the ${provider} API runner.`);
+}
+
+export function llmModel(role, provider = llmProvider(), readEnv = env) {
+  const model = readEnv(provider === "openai" ? "OPENAI_MODEL" : "ANTHROPIC_MODEL");
+  if (model.trim()) return model.trim();
+  // Preserve existing role-specific Anthropic overrides while honoring the
+  // new single model setting by default.
+  if (provider === "anthropic") {
+    const legacy = readEnv(role === "seat" ? "SEAT_MODEL" : "CHAIR_MODEL");
+    if (legacy.trim()) return legacy.trim();
+    return "claude-sonnet-5";
+  }
+  return "gpt-5.1";
+}

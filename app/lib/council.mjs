@@ -1,13 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import { SEATS, BOARD, byKey, systemFor, parseCard, checkQuotes, defaultBoard, loadRoster } from "./seats.mjs";
-import * as ai from "./anthropic.mjs";
-import { S } from "./anthropic.mjs";
-import { SESSIONS_DIR } from "./env.mjs";
+import * as ai from "./llm.mjs";
+import { S } from "./schema.mjs";
+import { SESSIONS_DIR, llmModel } from "./env.mjs";
 
 export const MODELS = {
-  seat: process.env.SEAT_MODEL || "claude-sonnet-5-5",
-  chair: process.env.CHAIR_MODEL || "claude-opus-5-5",
+  seat: llmModel("seat"),
+  chair: llmModel("chair"),
 };
 
 // The board comes from the roster: the saved default board, or every seat it lists.
