@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { SEATS, BOARD, byKey, systemFor, parseCard, checkQuotes, defaultBoard, loadRoster } from "./seats.mjs";
+import { SEATS, BOARD, byKey, systemFor, parseCard, checkQuotes, defaultBoard, loadRoster, invalidateAdvisorCaches } from "./seats.mjs";
 import * as ai from "./anthropic.mjs";
 import { S } from "./anthropic.mjs";
 import { SESSIONS_DIR } from "./env.mjs";
@@ -345,6 +345,7 @@ async function run(s) {
   // "default" seats the saved default board; "ask" and "auto" let the Chair pick from every seat
   // (there is no one to ask in the room, so "ask" picks like "auto" here)
   loadRoster();
+  invalidateAdvisorCaches();
   const pick = BOARD.mode !== "default";
   const st = (s.state = { prompt: s.prompt, mode: s.mode, pick, board: pick ? SEATS.map((x) => x.key) : defaultBoard(), cards: { 1: {}, 2: {}, 3: {} }, scores: {}, rounds: [] });
   emit(s, "phase", { phase: "setup", label: "The Chair is reading your question" });

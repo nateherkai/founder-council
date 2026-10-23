@@ -55,6 +55,11 @@ const norm = (s) =>
   s.toLowerCase().replace(/[‘’]/g, "'").replace(/'\s+(t|s|re|ll|ve|d|m)\b/g, "'$1")
     .replace(/[^a-z0-9' ]+/g, " ").replace(/\s+/g, " ").trim();
 const brainText = new Map();
+/** Start a new API-runner council with current agent and brain content. */
+export function invalidateAdvisorCaches() {
+  systemCache.clear();
+  brainText.clear();
+}
 function brainNorm(key) {
   if (!brainText.has(key)) {
     const dir = path.join(BRAINS_DIR, byKey[key].slug);
