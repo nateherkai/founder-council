@@ -53,26 +53,106 @@ export function systemFor(key) {
 // ---------- quote verification against the brain ----------
 const norm = (s) =>
   s.toLowerCase().replace(/[‘’]/g, "'").replace(/'\s+(t|s|re|ll|ve|d|m)\b/g, "'$1")
+    // a single quote used as a quotation mark (not inside a word, like don't) is punctuation
+    .replace(/(?<![a-z0-9])'|'(?![a-z0-9])/g, " ")
     .replace(/[^a-z0-9' ]+/g, " ").replace(/\s+/g, " ").trim();
 const brainText = new Map();
+const brainLineList = new Map();
 function brainNorm(key) {
   if (!brainText.has(key)) {
     const dir = path.join(BRAINS_DIR, byKey[key].slug);
-    const all = fs.existsSync(dir) ? fs.readdirSync(dir).map((f) => read(path.join(dir, f))).join(" ") : "";
+    const all = fs.existsSync(dir) ? fs.readdirSync(dir).map((f) => read(path.join(dir, f))).join("\n") : "";
     brainText.set(key, norm(all));
+    brainLineList.set(key, all.split("\n").filter((l) => l.trim()).map((l) => ({ text: norm(l), ids: l.match(/S\d{3}/g) || [] })));
   }
   return brainText.get(key);
 }
+// a closing quote, then a source id within 40 characters: "..." (S095), "..." [S048, 2026],
+// or "..." (Lead magnets, S112). Same rules as scripts/check_quotes.py.
+const CLOSE_THEN_ID = /["”](?=[^\n"“”]{0,40}?[(\[](?:[^()\[\]\n"“”]{0,30}?,\s*)?(S\d{3}))/g;
+// whether the quote mark at line[i] opens a quote (curly marks say so; straight ones by context)
+function isOpen(line, i) {
+  const ch = line[i];
+  if (ch === "“" || ch === "”") return ch === "“";
+  const next = line[i + 1] ?? " ", prev = line[i - 1] ?? " ";
+  // a mark right before "(" or "[" closes a quote, as in get,"(S011)
+  return !/\s/.test(next) && !"([".includes(next) && !(/[A-Za-z0-9]/.test(prev) || ".!?".includes(prev));
+}
+// The quote whose closing mark is line[end]: scan back, so a nested quote stays inside it, an
+// earlier separate quote stays out, and an opening mark that never closes widens it.
+function quoteEndingAt(line, end) {
+  let depth = 1, start = null;
+  for (let i = end - 1; i >= 0; i--) {
+    if (!'"“”'.includes(line[i])) continue;
+    if (!isOpen(line, i)) { depth++; continue; }
+    depth--;
+    if (start === null && depth === 0) start = i + 1;
+    else if (depth < 0) { start = i + 1; depth = 0; }
+  }
+  return start === null ? null : line.slice(start, end);
+}
 /** Quotes the seat attributed to a source id, each marked verified or not. */
-export function checkQuotes(key, text) {
+// "...", "…" or "[...]" marks words left out of a quote; GAP is the most normalized characters it may stand for
+const ELLIPSIS = /\[?(?:\.\.\.|…)\]?/;
+const GAP = 300;
+// each piece of a shortened quote must have this many words, so "The ... of ... the" proves nothing
+const MIN_PIECE_WORDS = 3;
+
+// Whether the quote is in the normalized text hay. A quote with ellipses verifies when its pieces
+// appear in order, as whole words, each within GAP of the one before, and each is MIN_PIECE_WORDS long.
+function inText(quote, hay) {
+  const parts = quote.split(ELLIPSIS).map(norm).filter(Boolean).map((p) => ` ${p} `);
+  if (parts.length <= 1) {
+    const q = norm(quote);
+    return hay.includes(q) || hay.replace(/ /g, "").includes(q.replace(/ /g, ""));
+  }
+  if (parts.some((p) => p.trim().split(" ").length < MIN_PIECE_WORDS)) return false;
+  const padded = ` ${hay} `;
+  for (let i = padded.indexOf(parts[0]); i !== -1; i = padded.indexOf(parts[0], i + 1)) {
+    let pos = i + parts[0].length - 1;
+    let ok = true;
+    for (const p of parts.slice(1)) {
+      const j = padded.indexOf(p, pos);
+      if (j === -1 || j - pos > GAP) { ok = false; break; }
+      pos = j + p.length - 1;
+    }
+    if (ok) return true;
+  }
+  return false;
+}
+
+/**
+ * `context` is what the seat may quote besides its brain: the brief and earlier rounds. A quote found
+ * there but not in the brain is marked `context: true` (quoting the founder or a seat, not the expert).
+ */
+// The ids the brain cites the quote under, when none of them is sid; null when sid fits. A brain line with
+// no id, or a quote that only matches across lines, can't be checked, so it passes.
+function citedElsewhere(key, quote, sids) {
+  const first = quote.split(ELLIPSIS).map(norm).find(Boolean) || "";
+  const hits = brainLineList.get(key).filter((l) => ` ${l.text} `.includes(` ${first} `) && inText(quote, l.text));
+  if (!hits.length || hits.some((l) => !l.ids.length || l.ids.some((id) => sids.includes(id)))) return null;
+  return [...new Set(hits.flatMap((l) => l.ids))].sort();
+}
+
+export function checkQuotes(key, text, context = "") {
   const out = [];
-  const re = /["“]([^"“”\n]{20,400})["”][^\n"]{0,40}?[(\[](S\d{3})/g;
-  let m;
   const hay = brainNorm(key);
-  while ((m = re.exec(text))) {
-    const q = norm(m[1]);
-    if (q.split(" ").length < 5) continue;
-    out.push({ quote: m[1], source: m[2], verified: hay.includes(q) || hay.replace(/ /g, "").includes(q.replace(/ /g, "")) });
+  const ctx = norm(context);
+  for (const line of text.split("\n")) {
+    for (const m of line.matchAll(CLOSE_THEN_ID)) {
+      if (isOpen(line, m.index)) continue;
+      const quote = quoteEndingAt(line, m.index);
+      if (quote === null || quote.length < 20 || quote.length > 400) continue;
+      const q = norm(quote);
+      if (q.split(" ").length < 5) continue;
+      const inBrain = inText(quote, hay);
+      // every id in the citation counts, as in (S090, S028)
+      const cite = line.slice(m.index + 1).match(/^[^\n"“”]{0,40}?[(\[][^()\[\]\n]{0,80}/);
+      const sids = cite ? cite[0].match(/S\d{3}/g) : [m[1]];
+      const citedAs = inBrain ? citedElsewhere(key, quote, sids) : null;
+      const verified = inBrain && !citedAs;
+      out.push({ quote, source: m[1], verified, citedAs, context: !inBrain && Boolean(ctx) && inText(quote, ctx) });
+    }
   }
   return out;
 }

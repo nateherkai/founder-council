@@ -127,7 +127,11 @@ SEAT: BUFFETT
 
 I DISAGREE MOST WITH: Martell. His argument: feeling underpaid is data, so move current clients to $3,500 on a date. I'd rather count dollars than feelings. A founder's feeling tells me nothing about whether a client gets more than $3,500 of value. The $22,500 is also a gross figure. It assumes all 15 stay. If 12 stay, the gain is $12,000, and at 9 it's zero. The cost of waiting is capped and known. The cost of losing the referral base is not. That is the asymmetry, and it is my translation of margin of safety (S065), not his words.
 
-I CONCEDE: The five step-up seats are right that "revisit later" is how a founder drifts. "The biggest mistakes... are the mistakes of omission rather than commission" (S028), and they never show on the books. So I'm changing my answer. I now want a written trigger set today, not an open-ended revisit. I still reject a fixed date for current clients before I see a single close at $3,500.
+I CONCEDE: The five step-up seats are right that "revisit later" is how a founder drifts. "The biggest mistakes... they're the mistakes of omission rather than commission" (S028), and they never show on the books. So I'm changing my answer. I now want a written trigger set today, not an open-ended revisit. I still reject a fixed date for current clients before I see a single close at $3,500.
 
 ON THE CRUXES:
 1.
+
+## Chair notes
+
+- Quote fix: Buffett's S028 line first read "...are the mistakes of omission". The source says "...they're the mistakes of omission", so the quote now matches it. No vote changed.

@@ -88,6 +88,13 @@ function startRound(x, r, label, at) {
   for (const k of st.seats) emit(x, "seat_start", { round: r, seat: k });
 }
 
+/** What a round-r card may quote besides the brain: the brief and the cards of earlier rounds. */
+function quoteContext(x, r) {
+  const st = x.st;
+  const earlier = st.rounds.filter((n) => n < r).flatMap((n) => Object.values(st.cards[n] || {}).map((c) => c.text));
+  return [st.decision, st.brief, readText(path.join(x.dir, "brief.md")) || "", ...earlier].join("\n");
+}
+
 /** Emit the cards in a round file that have not been emitted yet. Returns true once the round is complete. */
 function readRound(x, r, force) {
   const st = x.st;
@@ -96,7 +103,7 @@ function readRound(x, r, force) {
   for (const c of splitCards(md)) {
     if (!st.seats.includes(c.key) || st.cards[r][c.key]) continue;
     const parsed = parseCard(c.text, st.options.map((o) => o.id));
-    const quotes = checkQuotes(c.key, c.text);
+    const quotes = checkQuotes(c.key, c.text, quoteContext(x, r));
     st.cards[r][c.key] = { text: c.text, parsed, quotes };
     emit(x, "seat_done", { round: r, seat: c.key, text: c.text, parsed, quotes, name: byKey[c.key].name });
   }

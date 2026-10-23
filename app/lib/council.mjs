@@ -316,7 +316,8 @@ async function runSeat(s, st, round, key, prompt) {
     throw e;
   }
   const parsed = parseCard(text, st.options.map((o) => o.id));
-  const quotes = checkQuotes(key, text);
+  const earlier = [1, 2].filter((n) => n < round).flatMap((n) => Object.values(st.cards[n]).map((c) => c.text));
+  const quotes = checkQuotes(key, text, [st.prompt, st.decision, st.brief, ...earlier].join("\n"));
   st.cards[round][key] = { text, parsed, quotes };
   emit(s, "seat_done", { round, seat: key, text, parsed, quotes, name: seat.name });
 }

@@ -699,7 +699,7 @@ function openCard(seat, round) {
   $("#cardBody").innerHTML = `
     <div class="card-head"><img src="${portrait(seat)}" alt=""><div><div class="label">${esc(s.pillar)}</div><h3>${esc(s.name)}</h3><p class="muted" style="margin:0">Owns the question: ${esc(s.question)}</p></div></div>
     ${rounds.length > 1 ? `<p style="margin:0 0 6px">${rounds.slice().reverse().map((x) => `<button class="ghost" data-r="${x}" style="margin-right:6px">${ROUND_NAME[x]}</button>`).join("")}</p>` : ""}
-    ${c ? `<pre>${esc(c.text)}</pre>${c.quotes.length ? `<ul class="qcheck">${c.quotes.map((q) => `<li class="${q.verified ? "" : "bad"}">"${esc(shorten(q.quote, 110))}" (${q.source}) ${q.verified ? "verified in the brain" : "not found in the brain"}</li>`).join("")}</ul>` : ""}` : `<p class="muted">This seat has not spoken yet.</p>`}
+    ${c ? `<pre>${esc(c.text)}</pre>${c.quotes.length ? `<ul class="qcheck">${c.quotes.map((q) => `<li class="${q.verified ? "" : q.context ? "ctx" : "bad"}">"${esc(shorten(q.quote, 110))}" (${q.source}) ${q.verified ? "verified in the brain" : q.citedAs ? `in the brain as ${esc(q.citedAs.join(", "))}, not ${q.source}` : q.context ? "quotes the brief or an earlier round" : "not found in the brain"}</li>`).join("")}</ul>` : ""}` : `<p class="muted">This seat has not spoken yet.</p>`}
     <p class="muted" style="font-size:12px">A simulated advisor built from ${esc(s.name)}'s public work. Not the person.</p>`;
   $$("#cardBody [data-r]").forEach((b) => b.addEventListener("click", () => openCard(seat, Number(b.dataset.r))));
   const dlg = $("#cardDialog");

@@ -312,6 +312,7 @@ button { font: inherit; cursor: pointer; }
 .qcheck { font-size: 12px; margin: 0 0 12px; padding: 0; list-style: none; display: grid; gap: 4px; }
 .qcheck li::before { content: "✓ "; color: var(--go); font-weight: 800; }
 .qcheck li.bad::before { content: "? "; color: var(--dissent); }
+.qcheck li.ctx::before { content: "↩ "; color: var(--ink-mute); font-weight: 800; }
 .history { list-style: none; padding: 0; margin: 12px 0; display: grid; gap: 8px; }
 .history button { width: 100%; text-align: left; background: var(--surface-2); color: var(--ink); border: 1px solid var(--hairline); border-radius: 10px; padding: 10px 12px; }
 .history button:hover { border-color: var(--accent); }
