@@ -1,18 +1,157 @@
 {
   "board": "ask",
-  "default": ["bezos", "graham", "hormozi", "garyvee", "martell", "wickman", "buffett"],
+  "default": [
+    "bezos",
+    "graham",
+    "hormozi",
+    "garyvee",
+    "martell",
+    "wickman",
+    "buffett"
+  ],
   "seats": [
-    { "key": "bezos", "name": "Jeff Bezos", "short": "Bezos", "initials": "JB", "slug": "jeff-bezos", "pillar": "Strategy and decisions", "question": "Is this the right bet, and how reversible is it?", "dimension": "Strategic fit and reversibility", "color": "#e8a33d" },
-    { "key": "graham", "name": "Paul Graham", "short": "Graham", "initials": "PG", "slug": "paul-graham", "pillar": "Product and startups", "question": "Is this something people actually want, and is it growing?", "dimension": "Real demand and growth", "color": "#f06b3f" },
-    { "key": "hormozi", "name": "Alex Hormozi", "short": "Hormozi", "initials": "AH", "slug": "alex-hormozi", "pillar": "Offers, pricing, and sales", "question": "Will people pay, how much, and how do we close?", "dimension": "Offer strength and unit economics", "color": "#d94a6a" },
-    { "key": "garyvee", "name": "Gary Vaynerchuk", "short": "Gary V", "initials": "GV", "slug": "gary-vaynerchuk", "pillar": "Marketing and attention", "question": "Where does the attention come from, and is it underpriced?", "dimension": "Attention and distribution", "color": "#9b5de5" },
-    { "key": "martell", "name": "Dan Martell", "short": "Martell", "initials": "DM", "slug": "dan-martell", "pillar": "People, hiring, and founder time", "question": "Who does this, and what does it cost the founder's calendar?", "dimension": "Team capacity and founder time", "color": "#3d8bfd" },
-    { "key": "wickman", "name": "Gino Wickman", "short": "Wickman", "initials": "GW", "slug": "gino-wickman", "pillar": "Operations and scaling", "question": "Can the business run this without the founder holding it together?", "dimension": "Operational readiness", "color": "#1fa67a" },
-    { "key": "buffett", "name": "Warren Buffett", "short": "Buffett", "initials": "WB", "slug": "warren-buffett", "pillar": "Money and capital", "question": "What does it do to cash, risk, and long-term value?", "dimension": "Downside and capital efficiency", "color": "#4c6a92" },
-    { "key": "naval", "name": "Naval Ravikant", "short": "Naval", "initials": "NR", "slug": "naval-ravikant", "pillar": "Leverage and wealth", "question": "Does this build leverage and equity you own, or does it just rent out your time?", "dimension": "Leverage and ownership", "color": "#22b8a0" },
-    { "key": "sanchez", "name": "Codie Sanchez", "short": "Codie", "initials": "CS", "slug": "codie-sanchez", "pillar": "Buying and owning small businesses", "question": "Should you build this, or buy something that already works?", "dimension": "Buy versus build and deal terms", "color": "#e05d9b" },
-    { "key": "blakely", "name": "Sara Blakely", "short": "Sara", "initials": "SB", "slug": "sara-blakely", "pillar": "Consumer product and brand from zero", "question": "Will customers love it enough to sell it for you, without outside money?", "dimension": "Product love and self-funded growth", "color": "#c9a227" },
-    { "key": "leila", "name": "Leila Hormozi", "short": "Leila", "initials": "LH", "slug": "leila-hormozi", "pillar": "Leadership and scaling teams", "question": "Can your team and your leadership carry this, and who has to change?", "dimension": "Leadership and team capacity", "color": "#8fbf3a" },
-    { "key": "musk", "name": "Elon Musk", "short": "Elon", "initials": "EM", "slug": "elon-musk", "pillar": "First principles and execution speed", "question": "What is the real constraint here, and can we cut steps and build it faster?", "dimension": "Real constraints and execution speed", "color": "#c0392b" }
+    {
+      "key": "bezos",
+      "name": "Jeff Bezos",
+      "short": "Bezos",
+      "initials": "JB",
+      "slug": "jeff-bezos",
+      "pillar": "Strategy and decisions",
+      "question": "Is this the right bet, and how reversible is it?",
+      "dimension": "Strategic fit and reversibility",
+      "color": "#e8a33d"
+    },
+    {
+      "key": "graham",
+      "name": "Paul Graham",
+      "short": "Graham",
+      "initials": "PG",
+      "slug": "paul-graham",
+      "pillar": "Product and startups",
+      "question": "Is this something people actually want, and is it growing?",
+      "dimension": "Real demand and growth",
+      "color": "#f06b3f"
+    },
+    {
+      "key": "hormozi",
+      "name": "Alex Hormozi",
+      "short": "Hormozi",
+      "initials": "AH",
+      "slug": "alex-hormozi",
+      "pillar": "Offers, pricing, and sales",
+      "question": "Will people pay, how much, and how do we close?",
+      "dimension": "Offer strength and unit economics",
+      "color": "#d94a6a"
+    },
+    {
+      "key": "garyvee",
+      "name": "Gary Vaynerchuk",
+      "short": "Gary V",
+      "initials": "GV",
+      "slug": "gary-vaynerchuk",
+      "pillar": "Marketing and attention",
+      "question": "Where does the attention come from, and is it underpriced?",
+      "dimension": "Attention and distribution",
+      "color": "#9b5de5"
+    },
+    {
+      "key": "martell",
+      "name": "Dan Martell",
+      "short": "Martell",
+      "initials": "DM",
+      "slug": "dan-martell",
+      "pillar": "People, hiring, and founder time",
+      "question": "Who does this, and what does it cost the founder's calendar?",
+      "dimension": "Team capacity and founder time",
+      "color": "#3d8bfd"
+    },
+    {
+      "key": "wickman",
+      "name": "Gino Wickman",
+      "short": "Wickman",
+      "initials": "GW",
+      "slug": "gino-wickman",
+      "pillar": "Operations and scaling",
+      "question": "Can the business run this without the founder holding it together?",
+      "dimension": "Operational readiness",
+      "color": "#1fa67a"
+    },
+    {
+      "key": "buffett",
+      "name": "Warren Buffett",
+      "short": "Buffett",
+      "initials": "WB",
+      "slug": "warren-buffett",
+      "pillar": "Money and capital",
+      "question": "What does it do to cash, risk, and long-term value?",
+      "dimension": "Downside and capital efficiency",
+      "color": "#4c6a92"
+    },
+    {
+      "key": "naval",
+      "name": "Naval Ravikant",
+      "short": "Naval",
+      "initials": "NR",
+      "slug": "naval-ravikant",
+      "pillar": "Leverage and wealth",
+      "question": "Does this build leverage and equity you own, or does it just rent out your time?",
+      "dimension": "Leverage and ownership",
+      "color": "#22b8a0"
+    },
+    {
+      "key": "sanchez",
+      "name": "Codie Sanchez",
+      "short": "Codie",
+      "initials": "CS",
+      "slug": "codie-sanchez",
+      "pillar": "Buying and owning small businesses",
+      "question": "Should you build this, or buy something that already works?",
+      "dimension": "Buy versus build and deal terms",
+      "color": "#e05d9b"
+    },
+    {
+      "key": "blakely",
+      "name": "Sara Blakely",
+      "short": "Sara",
+      "initials": "SB",
+      "slug": "sara-blakely",
+      "pillar": "Consumer product and brand from zero",
+      "question": "Will customers love it enough to sell it for you, without outside money?",
+      "dimension": "Product love and self-funded growth",
+      "color": "#c9a227"
+    },
+    {
+      "key": "leila",
+      "name": "Leila Hormozi",
+      "short": "Leila",
+      "initials": "LH",
+      "slug": "leila-hormozi",
+      "pillar": "Leadership and scaling teams",
+      "question": "Can your team and your leadership carry this, and who has to change?",
+      "dimension": "Leadership and team capacity",
+      "color": "#8fbf3a"
+    },
+    {
+      "key": "musk",
+      "name": "Elon Musk",
+      "short": "Elon",
+      "initials": "EM",
+      "slug": "elon-musk",
+      "pillar": "First principles and execution speed",
+      "question": "What is the real constraint here, and can we cut steps and build it faster?",
+      "dimension": "Real constraints and execution speed",
+      "color": "#c0392b"
+    },
+    {
+      "key": "suby",
+      "name": "Sabri Suby",
+      "short": "Suby",
+      "initials": "SS",
+      "slug": "sabri-suby",
+      "pillar": "Advertising, customer acquisition, and budget",
+      "question": "Will this marketing spend actually bring in customers at a profit, and how do we prove it?",
+      "dimension": "Ad ROI and acquisition economics",
+      "color": "#e67e22"
+    }
   ]
 }
