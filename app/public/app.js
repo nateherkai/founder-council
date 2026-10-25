@@ -784,7 +784,7 @@ async function openHistory() {
 }
 
 async function replay(id) {
-  const j = await fetch(`/api/sessions/${encodeURIComponent(id)}`).then((x) => x.json());
+  const j = await fetch(`api/sessions/${encodeURIComponent(id)}`).then((x) => x.json());
   begin(id);
   state.replaying = true;
   for (const ev of j.events) {
