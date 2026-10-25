@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Login · Roast Room</title>
+  <link rel="icon" href="brand/favicon-ais.png" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --canvas: #07121c;
+      --surface: #0a1824;
+      --surface-2: #0d2031;
+      --surface-3: #16293a;
+      --hairline: rgba(255, 255, 255, 0.08);
+      --hairline-strong: rgba(255, 255, 255, 0.16);
+      --ink: #ffffff;
+      --ink-soft: #c9d1dc;
+      --ink-mute: #96a2b5;
+      --accent: #37bdf8;
+      --accent-soft: rgba(55, 189, 248, 0.12);
+      --dissent: #ff5a4f;
+      --font: "Montserrat", "Helvetica Neue", Arial, sans-serif;
+      --r: 14px;
+    }
+    * { box-sizing: border-box; margin: 0; }
+    body {
+      background: var(--canvas);
+      color: var(--ink-soft);
+      font: 400 14.5px/1.55 var(--font);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      -webkit-font-smoothing: antialiased;
+    }
+    ::selection { background: rgba(55, 189, 248, 0.3); color: var(--ink); }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--hairline);
+      border-radius: var(--r);
+      padding: 48px 40px 40px;
+      width: 100%;
+      max-width: 400px;
+      text-align: center;
+    }
+    .logo { height: 32px; margin-bottom: 12px; }
+    .title {
+      font: 600 22px/1.2 var(--font);
+      color: var(--ink);
+      letter-spacing: -0.03em;
+      margin-bottom: 6px;
+    }
+    .subtitle {
+      font-size: 13.5px;
+      color: var(--ink-mute);
+      margin-bottom: 32px;
+    }
+    .field {
+      display: flex;
+      flex-direction: column;
+      text-align: left;
+      margin-bottom: 18px;
+    }
+    .field label {
+      font: 500 12.5px/1 var(--font);
+      color: var(--ink-mute);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+    }
+    .field input {
+      background: var(--surface-2);
+      border: 1px solid var(--hairline-strong);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font: 400 15px/1.4 var(--font);
+      color: var(--ink);
+      outline: none;
+      transition: border-color 0.2s;
+      caret-color: var(--accent);
+    }
+    .field input:focus {
+      border-color: var(--accent);
+    }
+    .field input::placeholder {
+      color: var(--ink-mute);
+      opacity: 0.5;
+    }
+    .btn {
+      width: 100%;
+      padding: 13px 20px;
+      margin-top: 8px;
+      background: var(--accent);
+      color: #07121c;
+      border: none;
+      border-radius: 10px;
+      font: 600 15px/1 var(--font);
+      letter-spacing: -0.01em;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .btn:hover { opacity: 0.88; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .error {
+      color: var(--dissent);
+      font-size: 13px;
+      font-weight: 500;
+      margin-top: 14px;
+      min-height: 18px;
+    }
+  </style>
+</head>
+<body>
+  <form class="card" id="loginForm">
+    <img class="logo" src="brand/ais-horizontal.svg" alt="AI Automation Society">
+    <h1 class="title">Roast Room</h1>
+    <p class="subtitle">Sign in to access the council</p>
+    <div class="field">
+      <label for="user">Username</label>
+      <input id="user" name="user" type="text" autocomplete="username" required autofocus placeholder="Enter username">
+    </div>
+    <div class="field">
+      <label for="pass">Password</label>
+      <input id="pass" name="pass" type="password" autocomplete="current-password" required placeholder="Enter password">
+    </div>
+    <button class="btn" type="submit">Sign in</button>
+    <p class="error" id="err"></p>
+  </form>
+  <script>
+    const form = document.getElementById("loginForm");
+    const err = document.getElementById("err");
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      err.textContent = "";
+      const btn = form.querySelector("button");
+      btn.disabled = true;
+      try {
+        const r = await fetch("api/login", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            user: form.user.value.trim(),
+            pass: form.pass.value,
+          }),
+        });
+        const j = await r.json();
+        if (r.ok) {
+          window.location.href = "./";
+        } else {
+          err.textContent = j.error || "Login failed";
+          btn.disabled = false;
+        }
+      } catch {
+        err.textContent = "Connection error";
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
