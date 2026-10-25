@@ -91,7 +91,7 @@ const server = http.createServer(async (req, res) => {
       const token = parseCookies(req.headers.cookie).rr_session;
       if (token) sessions.delete(token);
       res.writeHead(302, {
-        location: "login.html",
+        location: "../login.html",
         "set-cookie": "rr_session=; Path=/; HttpOnly; Max-Age=0",
       });
       return res.end();
